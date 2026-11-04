@@ -25,7 +25,51 @@ env:
   RELEASE: ${{ startsWith(github.ref, 'refs/tags/immich/v') }}
 
 jobs:
+  # Which sides a push or PR touches, so a web-only change doesn't wait on a Mac
+  # and a phone-only change doesn't rebuild the server image. Tags, manual runs
+  # and anything shared (the pin, scripts, this workflow) run everything.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      web: ${{ steps.pick.outputs.web }}
+      mobile: ${{ steps.pick.outputs.mobile }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            shared:
+              - upstream/immich
+              - apps/immich/upstream.env
+              - scripts/**
+              - .github/actions/**
+              - .github/workflows/immich.yml
+            web:
+              - apps/immich/patches/web/**
+              - apps/immich/branding/web/**
+              - apps/immich/build/**
+              - apps/immich/checks/web.sh
+              - apps/immich/intent/web.md
+            mobile:
+              - apps/immich/patches/mobile/**
+              - apps/immich/branding/mobile/**
+              - apps/immich/checks/mobile.sh
+              - apps/immich/checks/mobile/**
+              - apps/immich/intent/mobile.md
+              # The phone reads the English strings the web patches own.
+              - apps/immich/patches/web/*English*
+      - id: pick
+        env:
+          ALL: ${{ github.event_name != 'push' && github.event_name != 'pull_request' || startsWith(github.ref, 'refs/tags/') || steps.filter.outputs.shared == 'true' }}
+        run: |
+          echo "web=${{ steps.filter.outputs.web }}" >> "$GITHUB_OUTPUT"
+          echo "mobile=${{ steps.filter.outputs.mobile }}" >> "$GITHUB_OUTPUT"
+          if [ "$ALL" = true ]; then echo "web=true" >> "$GITHUB_OUTPUT"; echo "mobile=true" >> "$GITHUB_OUTPUT"; fi
+
   web:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
@@ -59,6 +103,8 @@ jobs:
         run: docker push "$IMAGE:$VERSION"
 
   android:
+    needs: changes
+    if: needs.changes.outputs.mobile == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -75,7 +121,10 @@ jobs:
           retention-days: 14
 
   ios:
-    # Compiles on every change; only a release tag signs and uploads.
+    # Proves the iPhone app compiles: a debug simulator build, much quicker than
+    # Release. Only a release tag builds Release, signs it and uploads it.
+    needs: changes
+    if: needs.changes.outputs.mobile == 'true'
     runs-on: macos-latest
     timeout-minutes: 90
     steps:
@@ -92,7 +141,7 @@ jobs:
             ${{ runner.temp }}/spm
           key: ios-deps-${{ hashFiles('work/immich/mobile/ios/Podfile.lock', 'work/immich/mobile/ios/Runner.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'work/immich/mobile/pubspec.lock') }}
           restore-keys: ios-deps-
-      - name: Build for iPhone, unsigned
+      - name: Build for the iPhone simulator
         working-directory: work/immich/mobile
         run: |
           sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
@@ -102,9 +151,9 @@ jobs:
           # Flutter prepares the project; xcodebuild builds it. Immich's Swift macro packages need
           # -skipMacroValidation, and the build must not get -sdk (that builds the macro tools for
           # iOS instead of the Mac, and they fail with "produced malformed response").
-          flutter build ios --release --no-codesign --config-only --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
-          xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner -configuration Release \
-            -destination 'generic/platform=iOS' -skipMacroValidation -clonedSourcePackagesDirPath "$RUNNER_TEMP/spm" CODE_SIGNING_ALLOWED=NO build
+          flutter build ios --simulator --debug --config-only --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
+          xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' -skipMacroValidation -clonedSourcePackagesDirPath "$RUNNER_TEMP/spm" CODE_SIGNING_ALLOWED=NO build
 
   release-android:
     if: startsWith(github.ref, 'refs/tags/immich/v')
@@ -203,7 +252,7 @@ jobs:
   # commits (upstream, then upstream + Kimono) with no history behind them.
   # Generated: never edit it, edit the patches.
   publish-branch:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && !failure() && !cancelled()
     needs: [web, android]
     runs-on: ubuntu-latest
     permissions:
