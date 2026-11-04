@@ -22,9 +22,7 @@ docker smoke test (`--image`). Locations are as of Immich v3.1.0.
   and plum colours.
 - **Boot screen.** `web/src/app.html`: the pre-boot `#stencil` shows `/kimono-photos-mark.svg` and
   does not spin. The `<noscript>` text names Kimono Photos.
-- **Colour.** Primary comes from `#8d7fb5 / #3b3357 / #e2dcf0`. `web/src/app.css` overrides
-  `--immich-ui-primary-50…950` for light (`:root, .light`) and `.dark`, plus the legacy
-  `--immich-primary` and `--immich-dark-primary` RGB triplets. Flat colours only, no gradients.
+- **Colour, type and controls** are patch 0005's job, not this one.
 - **Auth pages are flat.** `lib/components/layouts/AuthPageLayout.svelte` drops the huge blurred
   logo backdrop (a plain surface instead), and its header shows the inline lockup.
 - **Misc.** The "About" modal (`lib/modals/ServerAboutModal.svelte`) and the truncated server error
@@ -40,6 +38,7 @@ docker smoke test (`--image`). Locations are as of Immich v3.1.0.
   - Promo copy becomes short and neutral: purchase panel, buy, version announcement, third-party
     support, Discord/GitHub help.
 - Keep ICU placeholders and `<tags>` intact.
+- "Login" reads "Sign in" (`login`, `to_login`): Kimono's word, seen on the fallback form.
 - Only `en.json` is edited. Other locales are untouched.
 
 ## 0003 No nags or upstream links (`web: remove upstream promotion, support links and update nags`)
@@ -94,3 +93,63 @@ docker smoke test (`--image`). Locations are as of Immich v3.1.0.
 - **No API changes.** The phone app depends on the API.
 - **Tests:** unit tests in `server/src/services/auth.service.spec.ts` (`getOAuthAutoLaunch`), and
   the smoke test in `checks/web.sh`.
+
+## 0005 Kimono's look (`web: dress the web app in Kimono's paper, ink and seals`)
+
+Source of truth: `kimono/docs/design-system.md` and `kimono/packages/ui/src/styles/tokens.css`.
+Photos must look like the same product as the Kimono Portal.
+
+- **Mechanism.**
+  - All styling is in one **unlayered** stylesheet, `web/src/kimono.css`, imported from
+    `web/src/app.css` right after `@immich/ui/theme/default.css`.
+  - Tailwind v4 keeps theme variables and utilities in cascade layers, so plain `:root` / `.dark`
+    custom properties and rules in an unlayered file win without editing components. Keep it
+    unlayered.
+  - Don't restyle individual components. Re-point variables, or add a data attribute through
+    the Vite hook.
+- **Hooks.** The `kimonoBrand` plugin's `transform` in `web/vite.config.ts` adds attributes to
+  `@immich/ui` sources:
+  - `internal/Button.svelte`: `data-k="seal"|"icon"`, `data-k-variant`, `data-k-color`
+  - `Heading/Heading.svelte`: `data-k-heading`
+  - `Navbar/NavbarItem.svelte`: `data-k-nav="active"|"idle"`
+  - `Avatar/Avatar.svelte`: `data-k-avatar`
+  - Immich's own `lib/components/shared-components/UserAvatar.svelte` carries `data-k-avatar`.
+  - If `@immich/ui` changes these files, re-find the equivalent spot. `checks/web.sh` checks that
+    the attributes reach the built bundle.
+  - In `vite dev` `@immich/ui` is pre-bundled, so the hooks only show in `vite build` output.
+- **Paper and ink.**
+  - Tailwind's `neutral/gray/zinc/slate/stone` scales are one warm ramp, from paper `#fffdf8` to
+    urushi `#1d1417`. `@immich/ui`'s `light-*`/`dark-*` scales are built on neutral, so they
+    follow.
+  - `--color-white` and `--color-black` are paper and plum-black.
+  - `--immich-ui-light/dark/gray/muted/default-border` and the legacy `--immich-*` triplets are
+    re-pointed.
+  - Light paper is the default: sheet `#fbf7ef`, ground `#f7f1e8`, fold `#ebe2d3`, hair
+    `#ddd0bf`, ink `#24221f`.
+  - Dark is plum-black urushi (`#1d1417` / `#2a1d22`, paper-toned type), never grey.
+  - `web/src/app.html`'s pre-paint `html.light` / `html.dark` colours match.
+- **Colour roles.**
+  - Primary is Photos' deep `#482f74` (pale `#e2dcf0`, accent `#8d7fb5`); dark mode uses the
+    pale ramp.
+  - Danger is suō `#a84d63`, success is moss, warning is wood, info is plum.
+- **Type.** UI text is Zen Maru Gothic (`--font-sans`). Shippori Mincho names things: `<Heading>`,
+  the page title `#user-page-header`, and album titles. Fonts are binary branding files in
+  `web/static/fonts/kimono/` (`branding/web/files/`).
+- **Corners and depth.**
+  - `--radius-*`: 1px for controls, 2px for surfaces.
+  - Shadow utilities become a 1px plum hairline, and backdrop blur is off.
+  - Control bars (`.h-control-bar`) are flat planks, not capsules.
+- **Seals, not pills.** Buttons with text are carved hanko blocks: 2px corners, a 2px base, a
+  carved inner ring on inked faces, and they sink 1px when pressed.
+  - Filled: inked in the accent.
+  - Filled-secondary and outline: a quiet seal (fold paper, hair base, no ring).
+  - Danger: a rose wash, inked on hover.
+  - Ghost: a plain word, unless Immich gave it a surface, in which case it becomes a quiet seal.
+  - Icon-only buttons are square-cut.
+- **Sidebar.** No pills on the right. The chosen room is a hover-paper row with a 3px marker in
+  Photos' colour.
+- **The cord.** `#dashboard-navbar` has 2px plum over 1px sakura underneath, as under every
+  Kimono header.
+- **Portraits.** People without a picture get their initial in plum Mincho on fold paper, never
+  Immich's random colour disc.
+

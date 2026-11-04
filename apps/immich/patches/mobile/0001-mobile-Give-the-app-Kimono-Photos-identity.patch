@@ -32,6 +32,19 @@ index 7e3d67f..be1b592 100644
      minSdk = 26
      targetSdk = flutter.targetSdkVersion
      versionCode flutter.versionCode
+diff --git a/mobile/android/app/src/debug/AndroidManifest.xml b/mobile/android/app/src/debug/AndroidManifest.xml
+index 4c0d925..a8deba0 100644
+--- a/mobile/android/app/src/debug/AndroidManifest.xml
++++ b/mobile/android/app/src/debug/AndroidManifest.xml
+@@ -5,6 +5,6 @@
+     -->
+   <uses-permission android:name="android.permission.INTERNET" />
+ 
+-  <application android:label="Immich-Debug" tools:replace="android:label">
++  <application android:label="Kimono Photos Debug" tools:replace="android:label">
+   </application>
+ </manifest>
+\ No newline at end of file
 diff --git a/mobile/android/app/src/main/AndroidManifest.xml b/mobile/android/app/src/main/AndroidManifest.xml
 index 1b8d2a9..1bbab8d 100644
 --- a/mobile/android/app/src/main/AndroidManifest.xml

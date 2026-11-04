@@ -27,7 +27,7 @@ absent() { local what="$1"; shift; if "$@" >/dev/null 2>&1; then fail "$what"; "
 echo "== static"
 expect "Android app id is app.kimono.photos" grep -q 'applicationId "app.kimono.photos"' "$M/android/app/build.gradle"
 expect "Android launcher label is Kimono Photos" grep -q 'android:label="Kimono Photos"' "$M/android/app/src/main/AndroidManifest.xml"
-absent "no Android label mentions Immich" grep -n 'android:label="[^"]*Immich' "$M/android/app/src/main/AndroidManifest.xml"
+absent "no Android label mentions Immich (release or debug)" grep -rn 'android:label="[^"]*Immich' "$M/android/app/src/main/AndroidManifest.xml" "$M/android/app/src/debug/AndroidManifest.xml"
 expect "iOS bundle id is app.kimono.photos" grep -Eq '^IMMICH_BUNDLE_ID_PROD = app\.kimono\.photos$' "$M/ios/Signing.xcconfig"
 expect "iOS App Group is group.app.kimono.photos" grep -Eq '^IMMICH_GROUP_ID = group\.app\.kimono\.photos$' "$M/ios/Signing.xcconfig"
 expect "iOS display name is Kimono Photos" grep -A1 -q 'CFBundleDisplayName' "$M/ios/Runner/Info.plist"
@@ -45,10 +45,19 @@ absent "no address field on the sign-in screens" grep -rln 'ImmichURLInput(\|log
 absent "the account sheet doesn't show the address" grep -rn 'server_info_box_server_url' "$M/lib" --include=*.dart --exclude=*.g.dart --exclude-dir=generated
 absent "Networking settings aren't listed" grep -n 'SettingSection\.values\.\(map\|where\|first\)' "$M/lib/pages/common/settings.page.dart"
 expect "sign-in starts Kimono's sign-in by itself" grep -q 'await oAuthLogin()' "$M/lib/widgets/forms/login/login_form.dart"
-expect "signing out stops the automatic sign-in" grep -q 'KimonoConnect.signedOut = true' "$M/lib/services/auth.service.dart"
+expect "tapping Sign out stops the automatic sign-in" grep -q 'KimonoConnect.signedOut = true' "$M/lib/widgets/common/app_bar_dialog/app_bar_dialog.dart"
+# Immich also signs out by itself (start-up with no session): that must not stop the first automatic sign-in.
+absent "the app's own sign-outs don't stop it" grep -n 'KimonoConnect.signedOut = true' "$M/lib/services/auth.service.dart" "$M/lib/providers/auth.provider.dart" "$M/lib/pages/common/splash_screen.page.dart"
 absent "no Immich docs/GitHub/Discord links" grep -rnE 'docs\.immich\.app|github\.com/immich-app/immich(/issues)?'"'"'|discord\.immich\.app' "$M/lib" --include=*.dart
 expect "branding: launcher icon replaced" bash -c "cmp -s '$ROOT/apps/immich/branding/mobile/files/mobile/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png' '$M/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png'"
 expect "branding: iOS icon replaced" bash -c "cmp -s '$ROOT/apps/immich/branding/mobile/files/mobile/ios/Runner/Assets.xcassets/AppIcon.appiconset/1024.png' '$M/ios/Runner/Assets.xcassets/AppIcon.appiconset/1024.png'"
+
+# Every Immich logo the app loads must be ours: catches a new upstream use of an asset we never replaced.
+stale=""
+for asset in $(grep -rhoE "assets/immich[A-Za-z0-9_.-]*\.(png|svg|json)" "$M/lib" --include=*.dart | sort -u); do
+  if [[ -f "$ROOT/upstream/immich/mobile/$asset" ]] && cmp -s "$ROOT/upstream/immich/mobile/$asset" "$M/$asset"; then stale+=" $asset"; fi
+done
+if [[ -z "$stale" ]]; then pass "every Immich logo the app loads is replaced"; else fail "still upstream's artwork:$stale"; fi
 
 if (( failures )); then echo "$failures static check(s) failed" >&2; exit 1; fi
 

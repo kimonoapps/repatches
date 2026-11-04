@@ -10,7 +10,7 @@ make a patch pass.
 | Behaviour | Where upstream keeps it (v3.1.0) |
 | --- | --- |
 | Android `applicationId` is `app.kimono.photos`; the Kotlin `namespace` stays `app.alextran.immich` so upstream classes don't move | `mobile/android/app/build.gradle` |
-| Launcher label and the share/view intent labels say "Kimono Photos" | `mobile/android/app/src/main/AndroidManifest.xml` |
+| Launcher label and the share/view intent labels say "Kimono Photos" (debug builds: "Kimono Photos Debug", `src/debug/AndroidManifest.xml`) | `mobile/android/app/src/main/AndroidManifest.xml` |
 | iOS bundle ids `app.kimono.photos` (release) / `app.kimono.photos.dev`, App Group `group.app.kimono.photos`, team empty (CI passes `DEVELOPMENT_TEAM`) | `mobile/ios/Signing.xcconfig` |
 | iOS display name "Kimono Photos" | `mobile/ios/Runner/Info.plist` `CFBundleDisplayName` |
 | App links use `kimono-photos://` instead of `immich://`: declared, routed and built (home-screen widgets too) | Manifest, `Info.plist`, `lib/main.dart` `_deepLinkBuilder`, `ios/WidgetExtension/ImmichAPI.swift`, `android/.../widget/*.kt` |
@@ -37,8 +37,12 @@ make a patch pass.
   phone to connect." On failure it offers "Try again".
 - The password form appears only when OAuth is off, or the OAuth attempt failed
   or was cancelled. That is the way back in if Kimono sign-in is down.
-- After sign-out (`AuthService.logout` sets `KimonoConnect.signedOut`) the
-  screen waits on the Kimono button instead of bouncing straight back in.
+- After a person taps **Sign out** (the account sheet,
+  `app_bar_dialog.dart`, sets `KimonoConnect.signedOut`) the screen waits on
+  the Kimono button instead of bouncing straight back in. Nothing else may set
+  it: Immich signs out by itself at start-up when there's no saved session
+  (`splash_screen.page.dart`), and the first open from the Portal must still go
+  straight to Kimono.
 - Immich's hidden demo-server shortcuts on the logo are removed.
 
 ## 3. No Immich links — `0003-mobile-Drop-Immich-s-own-links-from-the-app.patch`

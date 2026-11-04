@@ -83,6 +83,33 @@ assets_ok() {
 check "brand assets installed (logos, favicons, app icons)" assets_ok
 check "Vite swaps @immich/ui's logos" grep -q 'kimonoBrand()' web/vite.config.ts
 
+# The Kata theme (paper, ink, Mincho, seals) is wired in at the root.
+theme_ok() {
+  local f=web/src/kimono.css missing=0 t
+  grep -q "@import './kimono.css'" web/src/app.css || { echo "    app.css does not import kimono.css"; missing=1; }
+  [[ -s $f ]] || { echo "    $f missing"; return 1; }
+  for t in "--font-sans: var(--k-sans)" "--color-neutral-100" "--immich-ui-primary-500: #482f74" \
+           "--immich-ui-light: #1d1417" "--radius-xl: 2px" "[data-k='seal']" "[data-k-nav='active']" \
+           "#dashboard-navbar::after" "[data-k-avatar]"; do
+    grep -qF -- "$t" "$f" || { echo "    kimono.css lacks: $t"; missing=1; }
+  done
+  # The hooks kimono.css relies on must still be injected into @immich/ui.
+  for t in "data-k={icon ? 'icon' : 'seal'}" 'data-k-heading' "data-k-nav={active" 'data-k-avatar'; do
+    grep -qF -- "$t" web/vite.config.ts || { echo "    vite.config.ts lacks hook: $t"; missing=1; }
+  done
+  grep -q 'data-k-avatar' web/src/lib/components/shared-components/UserAvatar.svelte || { echo "    UserAvatar lacks data-k-avatar"; missing=1; }
+  return $missing
+}
+check "Kata theme wired in (kimono.css, @immich/ui hooks)" theme_ok
+fonts_ok() {
+  local f missing=0
+  for f in zen-maru-gothic-latin-400-normal zen-maru-gothic-latin-500-normal zen-maru-gothic-latin-700-normal shippori-mincho-600-latin; do
+    [[ -s "web/static/fonts/kimono/$f.woff2" ]] || { echo "    missing web/static/fonts/kimono/$f.woff2"; missing=1; }
+  done
+  return $missing
+}
+check "Kimono fonts installed (Zen Maru Gothic, Shippori Mincho)" fonts_ok
+
 # Components that carry purchase/support/update nags or upstream links must not be mounted anywhere.
 not_imported() {
   local hits=0 c
@@ -127,6 +154,13 @@ if ((SKIP_BUILD == 0)); then
       ! grep -q 'Immich' web/build/index.html
   }
   check "web bundle: Kimono logos in, Immich logos and name out of index.html" bundle_ok
+  # The hooks must survive the real build (they run on @immich/ui inside node_modules).
+  theme_bundle_ok() {
+    grep -rqF 'Zen Maru Gothic Kimono' web/build/_app/immutable/assets/ &&
+      grep -rqF 'data-k-variant' web/build/_app/immutable/ &&
+      grep -rqF 'data-k-nav' web/build/_app/immutable/
+  }
+  check "web bundle: Kata theme CSS and seal/nav hooks compiled in" theme_bundle_ok
   run "server: tsc" pnpm_ --dir server exec tsc --noEmit
   run "server: AuthService/ApiService unit tests" pnpm_ --dir server exec vitest run --config test/vitest.config.mjs \
     src/services/auth.service.spec.ts src/services/api.service.spec.ts

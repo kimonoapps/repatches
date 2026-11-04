@@ -19,56 +19,12 @@ What must survive upstream changes:
   Favicons and app icons are replaced by branding/web (binary, not in this patch).
 - The pre-boot stencil in app.html shows the Kimono Photos mark, static (no spin),
   and the <noscript> text names Kimono Photos.
-- Primary colour ramp comes from Kimono Photos' colours #8d7fb5 / #3b3357 /
-  #e2dcf0: app.css overrides @immich/ui's --immich-ui-primary-50..950 (light and
-  .dark) and the legacy --immich-primary / --immich-dark-primary triplets.
 - Auth pages are flat: AuthPageLayout no longer draws the giant blurred logo
   backdrop; its header shows the inline Kimono Photos lockup.
 - Server-About modal and the generic server-error toast don't say "Immich".
+- Colours, type and controls are the Kata theme patch's job ("web: dress the web
+  app in Kimono's paper, ink and seals"), not this one.
 
-diff --git a/web/src/app.css b/web/src/app.css
-index 31ac9eb..1c15a88 100644
---- a/web/src/app.css
-+++ b/web/src/app.css
-@@ -178,3 +178,38 @@
-     @apply bg-subtle rounded-lg;
-   }
- }
-+
-+/* Kimono Photos: primary ramp from the app's colours #8d7fb5 / #3b3357 / #e2dcf0 (flat, no gradients).
-+   Overrides @immich/ui's --immich-ui-primary-* and the legacy --immich-(dark-)primary RGB triplets. */
-+@layer base {
-+  :root,
-+  .light {
-+    --immich-ui-primary-50: color-mix(in oklch, #e2dcf0 45%, white);
-+    --immich-ui-primary-100: #e2dcf0;
-+    --immich-ui-primary-200: color-mix(in oklch, #e2dcf0 60%, #8d7fb5);
-+    --immich-ui-primary-300: color-mix(in oklch, #e2dcf0 25%, #8d7fb5);
-+    --immich-ui-primary-400: #8d7fb5;
-+    --immich-ui-primary-500: color-mix(in oklch, #8d7fb5 50%, #3b3357);
-+    --immich-ui-primary-600: color-mix(in oklch, #8d7fb5 25%, #3b3357);
-+    --immich-ui-primary-700: #3b3357;
-+    --immich-ui-primary-800: color-mix(in oklch, #3b3357 80%, black);
-+    --immich-ui-primary-900: color-mix(in oklch, #3b3357 60%, black);
-+    --immich-ui-primary-950: color-mix(in oklch, #3b3357 40%, black);
-+    --immich-primary: 100 89 134;
-+    --immich-dark-primary: 184 174 211;
-+  }
-+
-+  .dark {
-+    --immich-ui-primary-950: color-mix(in oklch, #e2dcf0 45%, white);
-+    --immich-ui-primary-900: #e2dcf0;
-+    --immich-ui-primary-800: color-mix(in oklch, #e2dcf0 75%, #8d7fb5);
-+    --immich-ui-primary-700: color-mix(in oklch, #e2dcf0 60%, #8d7fb5);
-+    --immich-ui-primary-600: color-mix(in oklch, #e2dcf0 55%, #8d7fb5);
-+    --immich-ui-primary-500: color-mix(in oklch, #e2dcf0 50%, #8d7fb5);
-+    --immich-ui-primary-400: #8d7fb5;
-+    --immich-ui-primary-300: color-mix(in oklch, #8d7fb5 50%, #3b3357);
-+    --immich-ui-primary-200: #3b3357;
-+    --immich-ui-primary-100: color-mix(in oklch, #3b3357 70%, black);
-+    --immich-ui-primary-50: color-mix(in oklch, #3b3357 50%, black);
-+  }
-+}
 diff --git a/web/src/app.html b/web/src/app.html
 index a998769..1c09d9e 100644
 --- a/web/src/app.html

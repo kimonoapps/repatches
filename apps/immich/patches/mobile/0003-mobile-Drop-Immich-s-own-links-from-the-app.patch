@@ -46,10 +46,10 @@ index 0d42387..c9a0ae7 100644
                _ActionLink(
                  icon: Icons.delete_outline,
 diff --git a/mobile/lib/widgets/common/app_bar_dialog/app_bar_dialog.dart b/mobile/lib/widgets/common/app_bar_dialog/app_bar_dialog.dart
-index e77bc18..a7aaa5c 100644
+index 57f563c..fb67731 100644
 --- a/mobile/lib/widgets/common/app_bar_dialog/app_bar_dialog.dart
 +++ b/mobile/lib/widgets/common/app_bar_dialog/app_bar_dialog.dart
-@@ -21,7 +21,6 @@ import 'package:immich_mobile/widgets/common/app_bar_dialog/app_bar_server_info.
+@@ -22,7 +22,6 @@ import 'package:immich_mobile/widgets/common/app_bar_dialog/app_bar_server_info.
  import 'package:immich_mobile/widgets/common/confirm_dialog.dart';
  import 'package:immich_mobile/widgets/common/immich_logo.dart';
  import 'package:package_info_plus/package_info_plus.dart';
@@ -57,7 +57,7 @@ index e77bc18..a7aaa5c 100644
  
  class ImmichAppBarDialog extends HookConsumerWidget {
    const ImmichAppBarDialog({super.key});
-@@ -177,22 +176,6 @@ class ImmichAppBarDialog extends HookConsumerWidget {
+@@ -180,22 +179,6 @@ class ImmichAppBarDialog extends HookConsumerWidget {
          child: Row(
            mainAxisAlignment: MainAxisAlignment.center,
            children: [

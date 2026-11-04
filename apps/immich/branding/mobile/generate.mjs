@@ -61,9 +61,30 @@ const silhouette = async (size, share, colour) => {
 };
 const solid = (colour) => sharp({ create: { width: 1, height: 1, channels: 3, background: colour } }).png().toBuffer();
 
-/* "KIMONO / PHOTOS", set like Kimono's wordmark (Georgia, spaced capitals, a rule). */
-const lockup = (ink, accent) => Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="600" viewBox="0 0 240 60"><text x="120" y="30" text-anchor="middle" fill="${ink}" font-family="Georgia, 'Times New Roman', serif" font-size="30" letter-spacing="5">KIMONO</text><rect x="72" y="42" width="22" height="1.2" fill="${accent}"/><text x="102" y="46.5" fill="${accent}" font-family="Arial, Helvetica, sans-serif" font-size="9" font-weight="700" letter-spacing="3">PHOTOS</text></svg>`);
 
+
+/* flutter_svg ignores filters and text it can't lay out, so the SVG the app loads just carries the PNG. */
+const svgOfPng = async (png, width, height) => Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${width} ${height}"><image width="${width}" height="${height}" xlink:href="data:image/png;base64,${png.toString("base64")}"/></svg>`);
+const text = (path, buffer) => {
+  files.push(path);
+  const full = join(out, path);
+  mkdirSync(dirname(full), { recursive: true });
+  writeFileSync(full, buffer);
+};
+/* Kimono Photos' lockup is the Portal's AppLockup (emblem, "kimono" in plum, "photos" in the
+   Photos accent), drawn with the real font by branding/web/tools/make-assets.sh. The phone uses
+   those same files so the two can't drift: the whole lockup in the top bar, and the wordmark
+   alone under the large emblem on the sign-in screen. */
+const webAssets = join(here, "../web/files/web/src/lib/assets/kimono");
+const lockupSvg = (mode) => readFileSync(join(webAssets, `logo-inline-${mode}.svg`));
+const lockupPng = (mode, height) => sharp(lockupSvg(mode), { density: 72 * height / 48 }).png().toBuffer();
+/* The wordmark is everything right of the emblem: in the 239×48 lockup the emblem ends at x=40, the word starts at 48. */
+const wordmarkPng = async (mode, height) => {
+  const full = await lockupPng(mode, height);
+  const { width } = await sharp(full).metadata();
+  const left = Math.round(width * 46 / 239);
+  return sharp(full).extract({ left, top: 0, width: width - left, height }).png().toBuffer();
+};
 const ramp = accentRamp(app.accent);
 const densities = { mdpi: 1, hdpi: 1.5, xhdpi: 2, xxhdpi: 3, xxxhdpi: 4 };
 const jobs = [
@@ -71,8 +92,21 @@ const jobs = [
   png("assets/immich-logo.png", bloomAt(1024, 1)),
   png("assets/immich-splash.png", bloomAt(320, 1)),
   png("assets/immich-splash-android12.png", bloomAt(1152, 768 / 1152 * 0.8)),
-  png("assets/immich-text-light.png", lockup(plum, ramp.deep)),
-  png("assets/immich-text-dark.png", lockup(paper, definition.metadata.colors[2])),
+  wordmarkPng("light", 600).then((b) => png("assets/immich-text-light.png", b)),
+  wordmarkPng("dark", 600).then((b) => png("assets/immich-text-dark.png", b)),
+  // Every other logo file upstream ships, so none of Immich's can surface.
+  ...["light", "dark"].flatMap((mode) => [
+    lockupPng(mode, 742).then((b) => png(`assets/immich-logo-inline-${mode}.png`, b)),
+    lockupPng(mode, 240).then(async (b) => {
+      const { width, height } = await sharp(b).metadata();
+      text(`assets/immich-logo-inline-${mode}.svg`, await svgOfPng(b, width, height));
+    }),
+  ]),
+  sharp(bloomAt(512, 1)).png().toBuffer().then((b) => text("assets/immich-logo.json", Buffer.from(JSON.stringify({ content: b.toString("base64") })))),
+  sharp(bloomAt(512, 1)).png().toBuffer().then((b) => svgOfPng(b, 100, 100)).then((svg) => text("assets/immich-logo.svg", svg)),
+  png("assets/immich-logo-w-bg.png", bloomAt(1024, 0.78, ground)),
+  png("assets/immich-logo-w-bg-android.png", bloomAt(1024, 0.6, ground)),
+  png("assets/immich-logo-android-adaptive-icon.png", bloomAt(324, 0.6)),
   // Android launcher: legacy square icons, and adaptive layers (safe zone is the middle 66%).
   ...Object.entries(densities).flatMap(([dpi, scale]) => [
     png(`android/app/src/main/res/mipmap-${dpi}/ic_launcher.png`, bloomAt(48 * scale, 0.78, ground)),

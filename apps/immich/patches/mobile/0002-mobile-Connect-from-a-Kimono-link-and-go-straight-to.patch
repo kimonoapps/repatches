@@ -21,18 +21,21 @@ Must survive upstream changes:
   to open Photos from Kimono. On failure: "Try again".
 - The password form appears only when OAuth is off or the OAuth attempt
   failed/was cancelled (Kimono's escape hatch when sign-in is down).
-- After sign-out (AuthService.logout sets KimonoConnect.signedOut) the
-  screen waits on the Kimono button instead of bouncing straight back in.
+- After a person taps Sign out (the account sheet sets
+  KimonoConnect.signedOut) the screen waits on the Kimono button instead of
+  bouncing straight back in. AuthService.logout must NOT set it: the app also
+  signs out by itself (start-up with no saved session, password change), and
+  the first launch from the Portal must still go straight to Kimono.
 - The address is not shown anywhere else: removed from the account sheet's
   server info, and the Networking settings section is hidden.
 - Immich's hidden demo-server shortcuts on the logo are removed.
 
 diff --git a/mobile/lib/kimono/kimono_connect.dart b/mobile/lib/kimono/kimono_connect.dart
 new file mode 100644
-index 0000000..3549260
+index 0000000..a9ff1fc
 --- /dev/null
 +++ b/mobile/lib/kimono/kimono_connect.dart
-@@ -0,0 +1,46 @@
+@@ -0,0 +1,48 @@
 +import 'package:flutter/foundation.dart';
 +import 'package:immich_mobile/domain/models/store.model.dart';
 +import 'package:immich_mobile/entities/store.entity.dart';
@@ -49,8 +52,10 @@ index 0000000..3549260
 +  /// Bumped when a connect link arrives, so an open sign-in screen follows it.
 +  static final requests = ValueNotifier<int>(0);
 +
-+  /// True after someone signs out, so the sign-in screen waits for them
-+  /// instead of sending them straight back into Kimono.
++  /// True after someone taps Sign out, so the sign-in screen waits for them
++  /// instead of sending them straight back into Kimono. Only that button sets
++  /// it: the app also signs out on its own (e.g. at start-up with no saved
++  /// session), and those must not stop the automatic sign-in.
 +  static bool signedOut = false;
 +
 +  static String? get server {
@@ -147,26 +152,27 @@ index d102fe0..71a2f33 100644
                  (s) => SliverToBoxAdapter(
                    child: ListTile(
                      title: Text(s.title).tr(),
-diff --git a/mobile/lib/services/auth.service.dart b/mobile/lib/services/auth.service.dart
-index 0de22fd..22c9590 100644
---- a/mobile/lib/services/auth.service.dart
-+++ b/mobile/lib/services/auth.service.dart
-@@ -13,6 +13,7 @@ import 'package:immich_mobile/providers/api.provider.dart';
- import 'package:immich_mobile/providers/background_sync.provider.dart';
- import 'package:immich_mobile/repositories/auth.repository.dart';
- import 'package:immich_mobile/repositories/auth_api.repository.dart';
+diff --git a/mobile/lib/widgets/common/app_bar_dialog/app_bar_dialog.dart b/mobile/lib/widgets/common/app_bar_dialog/app_bar_dialog.dart
+index e77bc18..57f563c 100644
+--- a/mobile/lib/widgets/common/app_bar_dialog/app_bar_dialog.dart
++++ b/mobile/lib/widgets/common/app_bar_dialog/app_bar_dialog.dart
+@@ -8,6 +8,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
+ import 'package:immich_mobile/extensions/build_context_extensions.dart';
+ import 'package:immich_mobile/models/server_info/server_disk_info.model.dart';
+ import 'package:immich_mobile/pages/common/settings.page.dart';
 +import 'package:immich_mobile/kimono/kimono_connect.dart';
- import 'package:immich_mobile/services/api.service.dart';
- import 'package:immich_mobile/services/network.service.dart';
- import 'package:logging/logging.dart';
-@@ -91,6 +92,7 @@ class AuthService {
-   ///
-   /// Throws any unhandled exceptions from the API request or local data clearing operations.
-   Future<void> logout() async {
-+    KimonoConnect.signedOut = true;
-     try {
-       await _authApiRepository.logout();
-     } catch (error, stackTrace) {
+ import 'package:immich_mobile/providers/auth.provider.dart';
+ import 'package:immich_mobile/providers/backup/backup.provider.dart';
+ import 'package:immich_mobile/providers/infrastructure/readonly_mode.provider.dart';
+@@ -123,6 +124,8 @@ class ImmichAppBarDialog extends HookConsumerWidget {
+                   ok: "yes",
+                   onOk: () async {
+                     isLoggingOut.value = true;
++                    // Kimono: a person chose to sign out, so don't send them straight back into Kimono.
++                    KimonoConnect.signedOut = true;
+                     await ref.read(authProvider.notifier).logout().whenComplete(() => isLoggingOut.value = false);
+ 
+                     ref.read(websocketProvider.notifier).disconnect();
 diff --git a/mobile/lib/widgets/common/app_bar_dialog/app_bar_server_info.dart b/mobile/lib/widgets/common/app_bar_dialog/app_bar_server_info.dart
 index a209d28..8858eba 100644
 --- a/mobile/lib/widgets/common/app_bar_dialog/app_bar_server_info.dart
@@ -449,3 +455,65 @@ index 79617f8..7147337 100644
                      ],
                    ),
  
+diff --git a/mobile/test/kimono/kimono_connect_test.dart b/mobile/test/kimono/kimono_connect_test.dart
+new file mode 100644
+index 0000000..eef1125
+--- /dev/null
++++ b/mobile/test/kimono/kimono_connect_test.dart
+@@ -0,0 +1,56 @@
++// Copied into the patched checkout's test/kimono/ by checks/mobile.sh.
++// Lives in repatches (not in a patch) so a patch repair can't weaken it.
++import 'package:drift/drift.dart' show DatabaseConnection;
++import 'package:drift/native.dart';
++import 'package:flutter_test/flutter_test.dart';
++import 'package:immich_mobile/domain/models/store.model.dart';
++import 'package:immich_mobile/domain/services/store.service.dart';
++import 'package:immich_mobile/entities/store.entity.dart';
++import 'package:immich_mobile/infrastructure/repositories/db.repository.dart';
++import 'package:immich_mobile/infrastructure/repositories/store.repository.dart';
++import 'package:immich_mobile/kimono/kimono_connect.dart';
++
++void main() {
++  setUpAll(() async {
++    final db = Drift(DatabaseConnection(NativeDatabase.memory(), closeStreamsSynchronously: true));
++    await StoreService.init(storeRepository: DriftStoreRepository(db), listenUpdates: false);
++  });
++
++  setUp(() async {
++    await Store.delete(StoreKey.serverUrl);
++    KimonoConnect.signedOut = false;
++  });
++
++  test('no address until a connect link arrives', () {
++    expect(KimonoConnect.server, isNull);
++  });
++
++  test('a connect link saves the origin, wakes the sign-in screen and clears a sign-out', () async {
++    final before = KimonoConnect.requests.value;
++    KimonoConnect.signedOut = true;
++    final ok = await KimonoConnect.accept(Uri.parse('kimono-photos://connect?server=https://photos.example.com/some/path?x=1'));
++    expect(ok, isTrue);
++    expect(KimonoConnect.server, 'https://photos.example.com');
++    expect(KimonoConnect.requests.value, before + 1);
++    expect(KimonoConnect.signedOut, isFalse);
++  });
++
++  test('links without a usable https address are ignored', () async {
++    for (final link in [
++      'kimono-photos://connect',
++      'kimono-photos://connect?server=',
++      'kimono-photos://connect?server=ftp://photos.example.com',
++      'kimono-photos://connect?server=javascript:alert(1)',
++      'kimono-photos://connect?server=https://',
++    ]) {
++      expect(await KimonoConnect.accept(Uri.parse(link)), isFalse, reason: link);
++    }
++    expect(KimonoConnect.server, isNull);
++  });
++
++  test('only kimono-photos://connect is a connect link', () {
++    expect(KimonoConnect.isConnectLink(Uri.parse('kimono-photos://connect?server=https://a.example')), isTrue);
++    expect(KimonoConnect.isConnectLink(Uri.parse('kimono-photos://asset?id=1')), isFalse);
++    expect(KimonoConnect.isConnectLink(Uri.parse('immich://connect?server=https://a.example')), isFalse);
++  });
++}

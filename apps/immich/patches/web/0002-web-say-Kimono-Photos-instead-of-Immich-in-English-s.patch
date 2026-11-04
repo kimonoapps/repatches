@@ -20,7 +20,7 @@ What must survive upstream changes:
   strings must be reworded when the patch is re-created.
 
 diff --git a/i18n/en.json b/i18n/en.json
-index 1dbd50e..ff8b123 100644
+index 1dbd50e..2884d0e 100644
 --- a/i18n/en.json
 +++ b/i18n/en.json
 @@ -41,7 +41,7 @@
@@ -222,6 +222,15 @@ index 1dbd50e..ff8b123 100644
    "location_picker_choose_on_map": "Choose on map",
    "location_picker_latitude_error": "Enter a valid latitude",
    "location_picker_latitude_hint": "Enter your latitude here",
+@@ -1307,7 +1307,7 @@
+   "logged_in_as": "Logged in as {user}",
+   "logged_out_all_devices": "Logged out all devices",
+   "logged_out_device": "Logged out device",
+-  "login": "Login",
++  "login": "Sign in",
+   "login_disabled": "Login has been disabled",
+   "login_form_api_exception": "API exception. Please check the server URL and try again.",
+   "login_form_email_hint": "youremail@email.com",
 @@ -1337,7 +1337,7 @@
    "main_branch_warning": "You're using a development version; we strongly recommend using a release version!",
    "main_menu": "Main menu",
@@ -357,6 +366,15 @@ index 1dbd50e..ff8b123 100644
    "system_theme": "System theme",
    "system_theme_command_description": "Use the system theme ({value})",
    "tag": "Tag",
+@@ -2117,7 +2117,7 @@
+   "to_archive": "Archive",
+   "to_change_password": "Change password",
+   "to_favorite": "Favorite",
+-  "to_login": "Login",
++  "to_login": "Sign in",
+   "to_multi_select": "to multi-select",
+   "to_parent": "Go to parent",
+   "to_select": "to select",
 @@ -2195,7 +2195,7 @@
    "upload_success": "Upload success, refresh the page to see new upload assets.",
    "upload_to_album_body": "For users that don't utilize the manual upload feature, you can now choose to add local photos directly into an album as you upload them, no need to upload then add to an album later anymore.",
