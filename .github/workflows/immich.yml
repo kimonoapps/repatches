@@ -1,0 +1,191 @@
+name: Kimono Photos (Immich)
+
+# Every push and PR: apply the patches, run the checks, build what changed.
+# A tag immich/v<upstream>-kimono.<n> (e.g. immich/v3.1.0-kimono.1) releases:
+# the server image to ghcr, the signed APK to a GitHub release, the iPhone
+# build to TestFlight.
+on:
+  push:
+    branches: [main]
+    tags: ["immich/v*"]
+    paths: ["apps/immich/**", "upstream/immich", "scripts/**", ".github/workflows/immich.yml", ".github/actions/immich-toolchain/**"]
+  pull_request:
+    paths: ["apps/immich/**", "upstream/immich", "scripts/**", ".github/workflows/immich.yml", ".github/actions/immich-toolchain/**"]
+  workflow_dispatch:
+
+concurrency:
+  group: immich-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/kimonoapps/kimono-photos-server
+  RELEASE: ${{ startsWith(github.ref, 'refs/tags/immich/v') }}
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: true }
+      - uses: ./.github/actions/immich-toolchain
+      - uses: docker/setup-buildx-action@v3
+      - name: Build the server image (web app included)
+        run: apps/immich/build/web-image.sh "$IMAGE:$VERSION"
+      - name: Check it
+        run: apps/immich/checks/web.sh work/immich --image "$IMAGE:$VERSION"
+      # ghcr.io/kimonoapps is an organisation GITHUB_TOKEN can't write to from
+      # here: publishing needs a token with write:packages, as GHCR_TOKEN.
+      - if: env.RELEASE == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ secrets.GHCR_USERNAME || github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+      - if: env.RELEASE == 'true'
+        name: Publish
+        run: docker push "$IMAGE:$VERSION"
+
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: true }
+      - uses: ./.github/actions/immich-toolchain
+        with: { flutter: "true" }
+      - name: Check the phone app, and build an APK
+        run: apps/immich/checks/mobile.sh work/immich --apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kimono-photos-unsigned-${{ env.VERSION }}
+          path: work/immich/mobile/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          retention-days: 14
+
+  ios:
+    # Compiles on every change; only a release tag signs and uploads.
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: true }
+      - uses: ./.github/actions/immich-toolchain
+        with: { flutter: "true" }
+      - name: Build for iPhone, unsigned
+        working-directory: work/immich/mobile
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          flutter pub get --enforce-lockfile
+          dart run easy_localization:generate -S ../i18n
+          dart run bin/generate_keys.dart
+          flutter build ios --release --no-codesign --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
+
+  release-android:
+    if: startsWith(github.ref, 'refs/tags/immich/v')
+    needs: [web, android, ios]
+    runs-on: ubuntu-latest
+    environment: mobile-release   # holds the signing key; restrict it to immich/v* tags
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: true }
+      - uses: ./.github/actions/immich-toolchain
+        with: { flutter: "true" }
+      - name: Build the signed APK
+        working-directory: work/immich/mobile
+        env:
+          KEYSTORE: ${{ secrets.KIMONO_ANDROID_KEYSTORE }}
+          KEYSTORE_PASSWORD: ${{ secrets.KIMONO_ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          printf '%s' "$KEYSTORE" | base64 -d > android/key.jks
+          export ALIAS=kimono ANDROID_KEY_PASSWORD="$KEYSTORE_PASSWORD" ANDROID_STORE_PASSWORD="$KEYSTORE_PASSWORD"
+          flutter pub get --enforce-lockfile
+          dart run easy_localization:generate -S ../i18n
+          dart run bin/generate_keys.dart
+          flutter build apk --release --target-platform android-arm64 --split-per-abi \
+            --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
+          rm -f android/key.jks
+          APK="$RUNNER_TEMP/kimono-photos-$VERSION.apk"
+          mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "$APK"
+          "$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/apksigner" verify --print-certs "$APK" | grep -q "CN=Kimono"
+          SHA=$(sha256sum "$APK" | cut -d' ' -f1); SIZE=$(stat -c %s "$APK")
+          printf '{"version":"%s","build":%s,"file":"%s","size":%s,"sha256":"%s"}\n' \
+            "$BUILD_NAME" "$BUILD_NUMBER" "$(basename "$APK")" "$SIZE" "$SHA" > "$RUNNER_TEMP/kimono-photos-android.json"
+          echo "APK=$APK" >> "$GITHUB_ENV"
+      - name: Attach to the release
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
+            gh release create "$GITHUB_REF_NAME" --title "Kimono Photos $VERSION" --notes "Immich $UPSTREAM_TAG with Kimono's patches. Server image: $IMAGE:$VERSION"
+          gh release upload "$GITHUB_REF_NAME" --clobber "$APK" "$RUNNER_TEMP/kimono-photos-android.json"
+
+  release-ios:
+    if: startsWith(github.ref, 'refs/tags/immich/v')
+    needs: [web, android, ios]
+    runs-on: macos-latest
+    environment: mobile-release
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: true }
+      - uses: ./.github/actions/immich-toolchain
+        with: { flutter: "true" }
+      - name: Archive and send to TestFlight
+        working-directory: work/immich/mobile
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY: ${{ secrets.ASC_KEY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          flutter pub get --enforce-lockfile
+          dart run easy_localization:generate -S ../i18n
+          dart run bin/generate_keys.dart
+          flutter build ios --release --no-codesign --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
+          KEY="$RUNNER_TEMP/asc.p8"; printf '%s' "$ASC_KEY" > "$KEY"
+          AUTH=(-allowProvisioningUpdates -authenticationKeyPath "$KEY" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID")
+          xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/Photos.xcarchive" archive "${AUTH[@]}" \
+            IMMICH_TEAM_ID="$APPLE_TEAM_ID" DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Automatic
+          cat > "$RUNNER_TEMP/export.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>$APPLE_TEAM_ID</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict></plist>
+          PLIST
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/Photos.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/export.plist" -exportPath "$RUNNER_TEMP/export" "${AUTH[@]}"
+          rm -f "$KEY"
+          echo "Kimono Photos $BUILD_NAME ($BUILD_NUMBER) is on its way to TestFlight."
+
+  # The patched tree as a branch, for reading and diffing on GitHub: two
+  # commits (upstream, then upstream + Kimono) with no history behind them.
+  # Generated: never edit it, edit the patches.
+  publish-branch:
+    if: github.ref == 'refs/heads/main'
+    needs: [web, android]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: true }
+      - uses: ./.github/actions/immich-toolchain
+      - name: Push patched/immich
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          cd work/immich
+          export GIT_AUTHOR_NAME=repatches GIT_AUTHOR_EMAIL=repatches@kimono.invalid GIT_COMMITTER_NAME=repatches GIT_COMMITTER_EMAIL=repatches@kimono.invalid
+          PIN=$(git -C "$GITHUB_WORKSPACE" ls-files -s upstream/immich | awk '{print $2}')
+          base=$(git commit-tree "$PIN^{tree}" -m "Immich $UPSTREAM_TAG ($PIN), unmodified")
+          top=$(git commit-tree "HEAD^{tree}" -p "$base" -m "Kimono Photos: patches and branding from $GITHUB_REPOSITORY@$GITHUB_SHA")
+          git push --force "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git" "$top:refs/heads/patched/immich"

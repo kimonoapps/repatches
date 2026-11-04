@@ -1,0 +1,451 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: repatches <repatches@kimono.invalid>
+Date: Wed, 4 Nov 2026 09:17:37 -0800
+Subject: [PATCH] mobile: Connect from a Kimono link and go straight to Kimono
+ sign-in
+
+Nobody types, sees or edits the server address, and opening the app goes
+directly to Kimono's sign-in sheet instead of an Immich sign-in screen.
+
+Must survive upstream changes:
+- lib/kimono/kimono_connect.dart owns the address: saved from the
+  kimono-photos://connect?server=<https origin> link (accepted only while
+  signed out; http only in debug builds) or the KIMONO_PHOTOS_SERVER
+  dart-define. It is stored in StoreKey.serverUrl, which upstream's own
+  validateServerUrl also writes.
+- The router (main.dart deep link builder) handles the connect link before
+  any other kimono-photos:// link.
+- The sign-in screen has no address field, no address text, no Back and no
+  Settings button. With an address it resolves the server and, when OAuth
+  is on, starts OAuth immediately (spinner meanwhile). Without one it says
+  to open Photos from Kimono. On failure: "Try again".
+- The password form appears only when OAuth is off or the OAuth attempt
+  failed/was cancelled (Kimono's escape hatch when sign-in is down).
+- After sign-out (AuthService.logout sets KimonoConnect.signedOut) the
+  screen waits on the Kimono button instead of bouncing straight back in.
+- The address is not shown anywhere else: removed from the account sheet's
+  server info, and the Networking settings section is hidden.
+- Immich's hidden demo-server shortcuts on the logo are removed.
+
+diff --git a/mobile/lib/kimono/kimono_connect.dart b/mobile/lib/kimono/kimono_connect.dart
+new file mode 100644
+index 0000000..3549260
+--- /dev/null
++++ b/mobile/lib/kimono/kimono_connect.dart
+@@ -0,0 +1,46 @@
++import 'package:flutter/foundation.dart';
++import 'package:immich_mobile/domain/models/store.model.dart';
++import 'package:immich_mobile/entities/store.entity.dart';
++
++/// Where Kimono Photos lives, and whether to go straight to Kimono sign-in.
++///
++/// The address comes from the `kimono-photos://connect?server=…` link the
++/// Kimono Portal opens on this phone (or is baked in with
++/// `--dart-define=KIMONO_PHOTOS_SERVER=…`). It is kept, never shown, and
++/// can't be typed in: there is no address field anywhere in the app.
++abstract final class KimonoConnect {
++  static const _builtIn = String.fromEnvironment('KIMONO_PHOTOS_SERVER');
++
++  /// Bumped when a connect link arrives, so an open sign-in screen follows it.
++  static final requests = ValueNotifier<int>(0);
++
++  /// True after someone signs out, so the sign-in screen waits for them
++  /// instead of sending them straight back into Kimono.
++  static bool signedOut = false;
++
++  static String? get server {
++    final saved = Store.tryGet(StoreKey.serverUrl);
++    if (saved != null && saved.isNotEmpty) {
++      return saved;
++    }
++    return _builtIn.isEmpty ? null : _builtIn;
++  }
++
++  static bool isConnectLink(Uri uri) => uri.scheme == 'kimono-photos' && uri.host == 'connect';
++
++  /// Saves the address from a connect link. Plain http only in debug builds.
++  static Future<bool> accept(Uri link) async {
++    final raw = link.queryParameters['server'];
++    final uri = raw == null ? null : Uri.tryParse(raw);
++    if (uri == null || uri.host.isEmpty) {
++      return false;
++    }
++    if (uri.scheme != 'https' && !(kDebugMode && uri.scheme == 'http')) {
++      return false;
++    }
++    await Store.put(StoreKey.serverUrl, uri.origin);
++    signedOut = false;
++    requests.value++;
++    return true;
++  }
++}
+diff --git a/mobile/lib/main.dart b/mobile/lib/main.dart
+index a7ae76d..ecbff79 100644
+--- a/mobile/lib/main.dart
++++ b/mobile/lib/main.dart
+@@ -32,6 +32,8 @@ import 'package:immich_mobile/providers/locale_provider.dart';
+ import 'package:immich_mobile/providers/routes.provider.dart';
+ import 'package:immich_mobile/providers/theme.provider.dart';
+ import 'package:immich_mobile/routing/app_navigation_observer.dart';
++import 'package:immich_mobile/kimono/kimono_connect.dart';
++import 'package:immich_mobile/providers/auth.provider.dart';
+ import 'package:immich_mobile/routing/router.dart';
+ import 'package:immich_mobile/services/deep_link.service.dart';
+ import 'package:immich_mobile/theme/dynamic_theme.dart';
+@@ -181,6 +183,13 @@ class ImmichAppState extends ConsumerState<ImmichApp> with WidgetsBindingObserve
+ 
+     final isColdStart = currentRouteName == null || currentRouteName == SplashScreenRoute.name;
+ 
++    if (KimonoConnect.isConnectLink(deepLink.uri)) {
++      if (!ref.read(authProvider).isAuthenticated) {
++        await KimonoConnect.accept(deepLink.uri);
++      }
++      return isColdStart ? DeepLink.defaultPath : DeepLink.none;
++    }
++
+     PageRouteInfo? route;
+     if (deepLink.uri.scheme == "kimono-photos") {
+       route = await deepLinkHandler.handleScheme(deepLink, ref);
+diff --git a/mobile/lib/pages/common/settings.page.dart b/mobile/lib/pages/common/settings.page.dart
+index d102fe0..71a2f33 100644
+--- a/mobile/lib/pages/common/settings.page.dart
++++ b/mobile/lib/pages/common/settings.page.dart
+@@ -47,6 +47,9 @@ enum SettingSection {
+   };
+ 
+   const SettingSection(this.title, this.icon, this.subtitle);
++
++  /// Networking edits and shows server addresses; Kimono sets the address.
++  static List<SettingSection> get shown => values.where((s) => s != SettingSection.networking).toList();
+ }
+ 
+ @RoutePage()
+@@ -67,7 +70,7 @@ class _MobileLayout extends StatelessWidget {
+   const _MobileLayout();
+   @override
+   Widget build(BuildContext context) {
+-    final List<Widget> settings = SettingSection.values
++    final List<Widget> settings = SettingSection.shown
+         .expand(
+           (setting) => setting == SettingSection.beta
+               ? [
+@@ -104,7 +107,7 @@ class _TabletLayout extends HookWidget {
+   const _TabletLayout();
+   @override
+   Widget build(BuildContext context) {
+-    final selectedSection = useState<SettingSection>(SettingSection.values.first);
++    final selectedSection = useState<SettingSection>(SettingSection.shown.first);
+ 
+     return Row(
+       mainAxisAlignment: MainAxisAlignment.start,
+@@ -113,7 +116,7 @@ class _TabletLayout extends HookWidget {
+           flex: 2,
+           child: CustomScrollView(
+             slivers: [
+-              ...SettingSection.values.map(
++              ...SettingSection.shown.map(
+                 (s) => SliverToBoxAdapter(
+                   child: ListTile(
+                     title: Text(s.title).tr(),
+diff --git a/mobile/lib/services/auth.service.dart b/mobile/lib/services/auth.service.dart
+index 0de22fd..22c9590 100644
+--- a/mobile/lib/services/auth.service.dart
++++ b/mobile/lib/services/auth.service.dart
+@@ -13,6 +13,7 @@ import 'package:immich_mobile/providers/api.provider.dart';
+ import 'package:immich_mobile/providers/background_sync.provider.dart';
+ import 'package:immich_mobile/repositories/auth.repository.dart';
+ import 'package:immich_mobile/repositories/auth_api.repository.dart';
++import 'package:immich_mobile/kimono/kimono_connect.dart';
+ import 'package:immich_mobile/services/api.service.dart';
+ import 'package:immich_mobile/services/network.service.dart';
+ import 'package:logging/logging.dart';
+@@ -91,6 +92,7 @@ class AuthService {
+   ///
+   /// Throws any unhandled exceptions from the API request or local data clearing operations.
+   Future<void> logout() async {
++    KimonoConnect.signedOut = true;
+     try {
+       await _authApiRepository.logout();
+     } catch (error, stackTrace) {
+diff --git a/mobile/lib/widgets/common/app_bar_dialog/app_bar_server_info.dart b/mobile/lib/widgets/common/app_bar_dialog/app_bar_server_info.dart
+index a209d28..8858eba 100644
+--- a/mobile/lib/widgets/common/app_bar_dialog/app_bar_server_info.dart
++++ b/mobile/lib/widgets/common/app_bar_dialog/app_bar_server_info.dart
+@@ -8,7 +8,6 @@ import 'package:immich_mobile/models/server_info/server_info.model.dart';
+ import 'package:immich_mobile/providers/locale_provider.dart';
+ import 'package:immich_mobile/providers/server_info.provider.dart';
+ import 'package:immich_mobile/providers/user.provider.dart';
+-import 'package:immich_mobile/utils/url_helper.dart';
+ import 'package:immich_mobile/widgets/common/app_bar_dialog/server_update_notification.dart';
+ import 'package:package_info_plus/package_info_plus.dart';
+ 
+@@ -52,8 +51,6 @@ class AppBarServerInfo extends HookConsumerWidget {
+             label: "server_version".tr(),
+             text: serverInfoState.serverVersion.major > 0 ? "${serverInfoState.serverVersion}" : "--",
+           ),
+-          divider,
+-          _ServerInfoItem(label: "server_info_box_server_url".tr(), text: getServerUrl() ?? '--', tooltip: true),
+           if (serverInfoState.latestVersion != null) ...[
+             divider,
+             _ServerInfoItem(
+diff --git a/mobile/lib/widgets/forms/login/login_form.dart b/mobile/lib/widgets/forms/login/login_form.dart
+index 79617f8..7147337 100644
+--- a/mobile/lib/widgets/forms/login/login_form.dart
++++ b/mobile/lib/widgets/forms/login/login_form.dart
+@@ -16,6 +16,7 @@ import 'package:immich_mobile/entities/store.entity.dart';
+ import 'package:immich_mobile/extensions/build_context_extensions.dart';
+ import 'package:immich_mobile/extensions/translate_extensions.dart';
+ import 'package:immich_mobile/infrastructure/repositories/settings.repository.dart';
++import 'package:immich_mobile/kimono/kimono_connect.dart';
+ import 'package:immich_mobile/providers/auth.provider.dart';
+ import 'package:immich_mobile/providers/background_sync.provider.dart';
+ import 'package:immich_mobile/providers/feature_message.provider.dart';
+@@ -43,8 +44,6 @@ class LoginForm extends HookConsumerWidget {
+ 
+   final log = Logger('LoginForm');
+ 
+-  String? _validateUrl(String? url) => normalizeAndValidateServerUrl(url) ? null : 'login_form_err_invalid_url'.tr();
+-
+   String? _validateEmail(String? email) {
+     if (email == null || email == '') {
+       return null;
+@@ -70,11 +69,12 @@ class LoginForm extends HookConsumerWidget {
+     final isOauthEnable = useState<bool>(false);
+     final isPasswordLoginEnable = useState<bool>(false);
+     final oAuthButtonLabel = useState<String>('OAuth');
+-    final logoAnimationController = useAnimationController(duration: const Duration(seconds: 60))..repeat();
+     final serverInfo = ref.watch(serverInfoProvider);
+     final warningMessage = useState<String?>(null);
+     final loginFormKey = GlobalKey<FormState>();
+     final ValueNotifier<String?> serverEndpoint = useState<String?>(null);
++    final connecting = useState<bool>(KimonoConnect.server != null);
++    final oauthFailed = useState<bool>(false);
+ 
+     checkVersionMismatch() async {
+       try {
+@@ -143,26 +143,6 @@ class LoginForm extends HookConsumerWidget {
+       }
+     }
+ 
+-    useEffect(() {
+-      final serverUrl = getServerUrl();
+-      if (serverUrl != null) {
+-        serverEndpointController.text = serverUrl;
+-      }
+-      return null;
+-    }, []);
+-
+-    populateTestLoginInfo() {
+-      emailController.text = 'demo@immich.app';
+-      passwordController.text = 'demo';
+-      serverEndpointController.text = 'https://demo.immich.app';
+-    }
+-
+-    populateTestLoginInfo1() {
+-      emailController.text = 'testuser@email.com';
+-      passwordController.text = 'password';
+-      serverEndpointController.text = 'http://10.1.15.216:2283/api';
+-    }
+-
+     Future<void> handleSyncFlow() async {
+       final backgroundManager = ref.read(backgroundSyncProvider);
+       final viewIntentHandler = ref.read(viewIntentHandlerProvider);
+@@ -282,7 +262,7 @@ class LoginForm extends HookConsumerWidget {
+       return base64Url.encode(digest.bytes).replaceAll('=', '');
+     }
+ 
+-    oAuthLogin() async {
++    Future<bool> oAuthLogin() async {
+       var oAuthService = ref.watch(oAuthServiceProvider);
+       String? oAuthServerUrl;
+ 
+@@ -309,7 +289,7 @@ class LoginForm extends HookConsumerWidget {
+           toastType: ToastType.error,
+           gravity: ToastGravity.TOP,
+         );
+-        return;
++        return false;
+       }
+ 
+       if (oAuthServerUrl != null) {
+@@ -317,7 +297,7 @@ class LoginForm extends HookConsumerWidget {
+           final loginResponseDto = await oAuthService.oAuthLogin(oAuthServerUrl, state, codeVerifier);
+ 
+           if (loginResponseDto == null) {
+-            return;
++            return false;
+           }
+ 
+           log.info("Finished OAuth login with response: ${loginResponseDto.userEmail}");
+@@ -334,7 +314,7 @@ class LoginForm extends HookConsumerWidget {
+             unawaited(handleSyncFlow());
+             unawaited(ref.read(featureMessageServiceProvider).markSeen());
+             unawaited(context.router.replaceAll([const TabShellRoute()]));
+-            return;
++            return true;
+           }
+         } catch (error, stack) {
+           log.severe('Error logging in with OAuth: $error', stack);
+@@ -353,10 +333,42 @@ class LoginForm extends HookConsumerWidget {
+           toastType: ToastType.info,
+           gravity: ToastGravity.TOP,
+         );
++        return false;
++      }
++      return false;
++    }
++
++    Future<void> connect() async {
++      final server = KimonoConnect.server;
++      if (server == null) {
++        connecting.value = false;
++        return;
++      }
++      serverEndpointController.text = server;
++      serverEndpoint.value = null;
++      connecting.value = true;
++      oauthFailed.value = false;
++      await getServerAuthSettings();
++      if (!context.mounted) {
+         return;
+       }
++      if (serverEndpoint.value != null && isOauthEnable.value && !KimonoConnect.signedOut) {
++        final signedIn = await oAuthLogin();
++        if (!context.mounted) {
++          return;
++        }
++        oauthFailed.value = !signedIn;
++      }
++      connecting.value = false;
+     }
+ 
++    useEffect(() {
++      void onLink() => unawaited(connect());
++      KimonoConnect.requests.addListener(onLink);
++      unawaited(connect());
++      return () => KimonoConnect.requests.removeListener(onLink);
++    }, []);
++
+     buildVersionCompatWarning() {
+       checkVersionMismatch();
+ 
+@@ -388,31 +400,30 @@ class LoginForm extends HookConsumerWidget {
+       );
+     }
+ 
+-    final serverSelectionOrLogin = serverEndpoint.value == null
++    final serverSelectionOrLogin = connecting.value
++        ? const Padding(
++            padding: EdgeInsets.only(top: ImmichSpacing.md),
++            child: Center(child: CircularProgressIndicator()),
++          )
++        : serverEndpoint.value == null
+         ? Padding(
+             padding: const EdgeInsets.only(top: ImmichSpacing.md),
+             child: Column(
+               mainAxisSize: MainAxisSize.max,
+               children: [
+-                ImmichForm(
+-                  onSubmit: getServerAuthSettings,
+-                  submitText: 'next'.t(context: context),
+-                  submitIcon: Icons.arrow_forward_rounded,
+-                  builder: (_, form) => ImmichURLInput(
+-                    controller: serverEndpointController,
+-                    label: 'login_form_endpoint_url'.t(context: context),
+-                    hintText: 'login_form_endpoint_hint'.t(context: context),
+-                    validator: _validateUrl,
+-                    keyboardAction: .next,
+-                    onSubmit: (_) => form.submit(),
++                if (KimonoConnect.server == null)
++                  Text(
++                    'Open Photos from Kimono on this phone to connect.',
++                    style: context.textTheme.bodyLarge,
++                    textAlign: TextAlign.center,
++                  )
++                else
++                  ImmichTextButton(
++                    labelText: 'Try again',
++                    icon: Icons.refresh_rounded,
++                    variant: ImmichVariant.ghost,
++                    onPressed: () => unawaited(connect()),
+                   ),
+-                ),
+-                ImmichTextButton(
+-                  labelText: 'settings'.t(context: context),
+-                  icon: Icons.settings,
+-                  variant: ImmichVariant.ghost,
+-                  onPressed: () => context.pushRoute(const SettingsRoute()),
+-                ),
+               ],
+             ),
+           )
+@@ -422,15 +433,8 @@ class LoginForm extends HookConsumerWidget {
+               mainAxisSize: MainAxisSize.max,
+               children: [
+                 buildVersionCompatWarning(),
+-                Padding(
+-                  padding: const EdgeInsets.only(bottom: ImmichSpacing.md),
+-                  child: Text(
+-                    normalizeServerUrl(serverEndpointController.text),
+-                    style: context.textTheme.displaySmall,
+-                    textAlign: TextAlign.center,
+-                  ),
+-                ),
+-                if (isPasswordLoginEnable.value)
++                // Passwords are the way in only when Kimono sign-in is off or failing.
++                if (isPasswordLoginEnable.value && (!isOauthEnable.value || oauthFailed.value))
+                   ImmichForm(
+                     onSubmit: login,
+                     submitText: 'login'.t(context: context),
+@@ -461,10 +465,13 @@ class LoginForm extends HookConsumerWidget {
+                   ),
+                 if (isOauthEnable.value)
+                   ImmichForm(
+-                    onSubmit: oAuthLogin,
++                    onSubmit: () async {
++                      KimonoConnect.signedOut = false;
++                      oauthFailed.value = !await oAuthLogin();
++                    },
+                     submitText: oAuthButtonLabel.value,
+                     submitIcon: Icons.pin_outlined,
+-                    builder: (context, _) => isPasswordLoginEnable.value
++                    builder: (context, _) => isPasswordLoginEnable.value && oauthFailed.value
+                         ? Padding(
+                             padding: const EdgeInsets.only(left: 18.0, right: 18.0, top: 12.0),
+                             child: Divider(color: context.isDarkTheme ? Colors.white : Colors.black, height: 5),
+@@ -473,12 +480,6 @@ class LoginForm extends HookConsumerWidget {
+                   ),
+                 if (!isOauthEnable.value && !isPasswordLoginEnable.value)
+                   Center(child: const Text('login_disabled').tr()),
+-                ImmichTextButton(
+-                  labelText: 'back'.t(context: context),
+-                  icon: Icons.arrow_back,
+-                  variant: ImmichVariant.ghost,
+-                  onPressed: () => serverEndpoint.value = null,
+-                ),
+               ],
+             ),
+           );
+@@ -494,19 +495,12 @@ class LoginForm extends HookConsumerWidget {
+                 mainAxisAlignment: MainAxisAlignment.center,
+                 children: [
+                   SizedBox(height: constraints.maxHeight / 5),
+-                  Column(
++                  const Column(
+                     crossAxisAlignment: CrossAxisAlignment.center,
+                     mainAxisAlignment: MainAxisAlignment.end,
+                     children: [
+-                      GestureDetector(
+-                        onDoubleTap: () => populateTestLoginInfo(),
+-                        onLongPress: () => populateTestLoginInfo1(),
+-                        child: RotationTransition(
+-                          turns: logoAnimationController,
+-                          child: const ImmichLogo(heroTag: 'logo'),
+-                        ),
+-                      ),
+-                      const Padding(padding: EdgeInsets.only(top: 8.0, bottom: 16), child: ImmichTitleText()),
++                      ImmichLogo(heroTag: 'logo'),
++                      Padding(padding: EdgeInsets.only(top: 8.0, bottom: 16), child: ImmichTitleText()),
+                     ],
+                   ),
+ 

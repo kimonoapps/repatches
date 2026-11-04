@@ -1,0 +1,82 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: repatches <repatches@kimono.invalid>
+Date: Wed, 4 Nov 2026 09:18:25 -0800
+Subject: [PATCH] mobile: Drop Immich's own links from the app
+
+Kimono Photos shouldn't send people to Immich's docs, GitHub or Discord.
+
+Must survive upstream changes:
+- The account sheet footer keeps only "Licenses" (open-source notices stay).
+- The start-up error screen keeps "Clear app data" but not the Discord and
+  GitHub issue links.
+- Update reminders are left alone: Kimono turns Immich's new-version check
+  off in the server config and ships app and server together, so they
+  don't appear.
+
+diff --git a/mobile/lib/pages/common/splash_screen.page.dart b/mobile/lib/pages/common/splash_screen.page.dart
+index 0d42387..c9a0ae7 100644
+--- a/mobile/lib/pages/common/splash_screen.page.dart
++++ b/mobile/lib/pages/common/splash_screen.page.dart
+@@ -25,7 +25,6 @@ import 'package:immich_mobile/theme/theme_data.dart';
+ import 'package:immich_mobile/widgets/common/immich_logo.dart';
+ import 'package:immich_mobile/widgets/common/immich_title_text.dart';
+ import 'package:logging/logging.dart';
+-import 'package:url_launcher/url_launcher.dart' show launchUrl, LaunchMode;
+ 
+ class BootstrapErrorWidget extends StatelessWidget {
+   final String error;
+@@ -154,19 +153,6 @@ class _BottomPanelState extends State<_BottomPanel> {
+         Row(
+           mainAxisAlignment: MainAxisAlignment.center,
+           children: [
+-            _ActionLink(
+-              icon: Icons.chat_bubble_outline,
+-              label: context.t.discord,
+-              onTap: () => launchUrl(Uri.parse('https://discord.immich.app/'), mode: LaunchMode.externalApplication),
+-            ),
+-            _ActionLink(
+-              icon: Icons.bug_report_outlined,
+-              label: context.t.profile_drawer_github,
+-              onTap: () => launchUrl(
+-                Uri.parse('https://github.com/immich-app/immich/issues'),
+-                mode: LaunchMode.externalApplication,
+-              ),
+-            ),
+             if (!_cleared)
+               _ActionLink(
+                 icon: Icons.delete_outline,
+diff --git a/mobile/lib/widgets/common/app_bar_dialog/app_bar_dialog.dart b/mobile/lib/widgets/common/app_bar_dialog/app_bar_dialog.dart
+index e77bc18..a7aaa5c 100644
+--- a/mobile/lib/widgets/common/app_bar_dialog/app_bar_dialog.dart
++++ b/mobile/lib/widgets/common/app_bar_dialog/app_bar_dialog.dart
+@@ -21,7 +21,6 @@ import 'package:immich_mobile/widgets/common/app_bar_dialog/app_bar_server_info.
+ import 'package:immich_mobile/widgets/common/confirm_dialog.dart';
+ import 'package:immich_mobile/widgets/common/immich_logo.dart';
+ import 'package:package_info_plus/package_info_plus.dart';
+-import 'package:url_launcher/url_launcher.dart';
+ 
+ class ImmichAppBarDialog extends HookConsumerWidget {
+   const ImmichAppBarDialog({super.key});
+@@ -177,22 +176,6 @@ class ImmichAppBarDialog extends HookConsumerWidget {
+         child: Row(
+           mainAxisAlignment: MainAxisAlignment.center,
+           children: [
+-            InkWell(
+-              onTap: () {
+-                ContextHelper(context).pop();
+-                launchUrl(Uri.parse('https://docs.immich.app'), mode: LaunchMode.externalApplication);
+-              },
+-              child: Text("documentation", style: context.textTheme.bodySmall).tr(),
+-            ),
+-            const SizedBox(width: 20, child: Text("•", textAlign: TextAlign.center)),
+-            InkWell(
+-              onTap: () {
+-                ContextHelper(context).pop();
+-                launchUrl(Uri.parse('https://github.com/immich-app/immich'), mode: LaunchMode.externalApplication);
+-              },
+-              child: Text("profile_drawer_github", style: context.textTheme.bodySmall).tr(),
+-            ),
+-            const SizedBox(width: 20, child: Text("•", textAlign: TextAlign.center)),
+             InkWell(
+               onTap: () async {
+                 ContextHelper(context).pop();

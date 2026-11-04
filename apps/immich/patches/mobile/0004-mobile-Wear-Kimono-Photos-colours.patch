@@ -1,0 +1,158 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: repatches <repatches@kimono.invalid>
+Date: Wed, 4 Nov 2026 09:24:20 -0800
+Subject: [PATCH] mobile: Wear Kimono Photos' colours
+
+The app's default theme, launcher icon background and splash screens use
+Kimono Photos' palette and Kimono's paper ground instead of Immich's blue.
+
+Must survive upstream changes:
+- Default ("indigo") theme brand colours: light #482F74 (Photos deep),
+  dark #E2DCF0 (Photos pale). Other presets the person picks are left alone.
+- Launcher adaptive-icon background #f7f1e8; splash background #f7f1e8 light,
+  #1c1618 dark (pre-12 bitmaps, Android 12+ styles, flutter_native_splash.yaml).
+- The adaptive-icon foreground/monochrome vector drawables are deleted: the
+  branding step ships PNG layers under drawable-nodpi with the same names.
+  Artwork (icons, splash, logo, lockup) is copied in by
+  apps/immich/branding/mobile/install.sh, not patched.
+
+diff --git a/mobile/android/app/src/main/res/drawable/ic_launcher_foreground.xml b/mobile/android/app/src/main/res/drawable/ic_launcher_foreground.xml
+deleted file mode 100644
+index d14fce3..0000000
+--- a/mobile/android/app/src/main/res/drawable/ic_launcher_foreground.xml
++++ /dev/null
+@@ -1,27 +0,0 @@
+-<?xml version="1.0" encoding="utf-8"?>
+-<vector xmlns:android="http://schemas.android.com/apk/res/android"
+-  android:width="108dp"
+-  android:height="108dp"
+-  android:viewportWidth="108"
+-  android:viewportHeight="108">
+-  <path
+-    android:fillColor="#FA2921"
+-    android:fillType="nonZero"
+-    android:pathData="m52.25,43.55c3.4,3.08 6.15,6.39 7.91,9.5 3.03,-5.55 5.06,-12.14 5.08,-16.34 0,-0.03 0,-0.06 0,-0.08 0,-6.21 -6.06,-8.63 -11.28,-8.63 -5.22,0 -11.28,2.42 -11.28,8.63 0,0.08 0,0.2 0,0.34 2.91,1.32 6.36,3.69 9.56,6.59z" />
+-  <path
+-    android:fillColor="#ED79B5"
+-    android:fillType="nonZero"
+-    android:pathData="m33.68,60.5c2.13,-2.42 5.39,-5.05 9.08,-7.27 3.92,-2.36 7.84,-4.01 11.28,-4.76 -4.22,-4.67 -9.72,-8.67 -13.62,-10 -0.03,-0.01 -0.05,-0.02 -0.08,-0.03 -5.78,-1.92 -9.9,3.23 -11.51,8.31 -1.61,5.08 -1.24,11.72 4.54,13.64 0.08,0.03 0.18,0.06 0.31,0.1z" />
+-  <path
+-    android:fillColor="#FFB400"
+-    android:fillType="nonZero"
+-    android:pathData="M79.17,46.67C77.56,41.59 73.44,36.44 67.66,38.36c-0.08,0.03 -0.19,0.06 -0.31,0.1 -0.33,3.24 -1.46,7.33 -3.17,11.34 -1.81,4.27 -4.04,7.96 -6.39,10.64 6.1,1.24 12.85,1.17 16.76,-0.1 0.03,-0.01 0.05,-0.02 0.08,-0.03 5.78,-1.92 6.15,-8.56 4.54,-13.64z" />
+-  <path
+-    android:fillColor="#1E83F7"
+-    android:fillType="nonZero"
+-    android:pathData="m48.82,65.46c-0.98,-4.54 -1.3,-8.87 -0.94,-12.45 -5.64,2.67 -11.07,6.78 -13.5,10.16 -0.02,0.02 -0.03,0.05 -0.05,0.07 -3.57,5.03 -0.06,10.63 4.16,13.77 4.22,3.14 10.51,4.83 14.09,-0.2 0.05,-0.07 0.11,-0.16 0.19,-0.27 -1.59,-2.82 -3.03,-6.81 -3.95,-11.08z" />
+-  <path
+-    android:fillColor="#18C249"
+-    android:fillType="nonZero"
+-    android:pathData="m73.58,62.92c-3.11,0.68 -7.26,0.84 -11.52,0.42 -4.53,-0.45 -8.64,-1.47 -11.86,-2.93 0.73,6.31 2.88,12.87 5.28,16.28 0.02,0.02 0.03,0.05 0.05,0.07 3.57,5.03 9.86,3.34 14.09,0.2 4.22,-3.14 7.74,-8.74 4.16,-13.77 -0.05,-0.07 -0.11,-0.16 -0.19,-0.27z" />
+-</vector>
+diff --git a/mobile/android/app/src/main/res/drawable/ic_launcher_monochrome.xml b/mobile/android/app/src/main/res/drawable/ic_launcher_monochrome.xml
+deleted file mode 100644
+index 8b19a43..0000000
+--- a/mobile/android/app/src/main/res/drawable/ic_launcher_monochrome.xml
++++ /dev/null
+@@ -1,27 +0,0 @@
+-<?xml version="1.0" encoding="utf-8"?>
+-<vector xmlns:android="http://schemas.android.com/apk/res/android"
+-  android:width="108dp"
+-  android:height="108dp"
+-  android:viewportWidth="108"
+-  android:viewportHeight="108">
+-  <path
+-    android:fillColor="#fff"
+-    android:fillType="nonZero"
+-    android:pathData="m52.25,43.55c3.4,3.08 6.15,6.39 7.91,9.5 3.03,-5.55 5.06,-12.14 5.08,-16.34 0,-0.03 0,-0.06 0,-0.08 0,-6.21 -6.06,-8.63 -11.28,-8.63 -5.22,0 -11.28,2.42 -11.28,8.63 0,0.08 0,0.2 0,0.34 2.91,1.32 6.36,3.69 9.56,6.59z" />
+-  <path
+-    android:fillColor="#fff"
+-    android:fillType="nonZero"
+-    android:pathData="m33.68,60.5c2.13,-2.42 5.39,-5.05 9.08,-7.27 3.92,-2.36 7.84,-4.01 11.28,-4.76 -4.22,-4.67 -9.72,-8.67 -13.62,-10 -0.03,-0.01 -0.05,-0.02 -0.08,-0.03 -5.78,-1.92 -9.9,3.23 -11.51,8.31 -1.61,5.08 -1.24,11.72 4.54,13.64 0.08,0.03 0.18,0.06 0.31,0.1z" />
+-  <path
+-    android:fillColor="#fff"
+-    android:fillType="nonZero"
+-    android:pathData="M79.17,46.67C77.56,41.59 73.44,36.44 67.66,38.36c-0.08,0.03 -0.19,0.06 -0.31,0.1 -0.33,3.24 -1.46,7.33 -3.17,11.34 -1.81,4.27 -4.04,7.96 -6.39,10.64 6.1,1.24 12.85,1.17 16.76,-0.1 0.03,-0.01 0.05,-0.02 0.08,-0.03 5.78,-1.92 6.15,-8.56 4.54,-13.64z" />
+-  <path
+-    android:fillColor="#fff"
+-    android:fillType="nonZero"
+-    android:pathData="m48.82,65.46c-0.98,-4.54 -1.3,-8.87 -0.94,-12.45 -5.64,2.67 -11.07,6.78 -13.5,10.16 -0.02,0.02 -0.03,0.05 -0.05,0.07 -3.57,5.03 -0.06,10.63 4.16,13.77 4.22,3.14 10.51,4.83 14.09,-0.2 0.05,-0.07 0.11,-0.16 0.19,-0.27 -1.59,-2.82 -3.03,-6.81 -3.95,-11.08z" />
+-  <path
+-    android:fillColor="#fff"
+-    android:fillType="nonZero"
+-    android:pathData="m73.58,62.92c-3.11,0.68 -7.26,0.84 -11.52,0.42 -4.53,-0.45 -8.64,-1.47 -11.86,-2.93 0.73,6.31 2.88,12.87 5.28,16.28 0.02,0.02 0.03,0.05 0.05,0.07 3.57,5.03 9.86,3.34 14.09,0.2 4.22,-3.14 7.74,-8.74 4.16,-13.77 -0.05,-0.07 -0.11,-0.16 -0.19,-0.27z" />
+-</vector>
+diff --git a/mobile/android/app/src/main/res/values-night-v31/styles.xml b/mobile/android/app/src/main/res/values-night-v31/styles.xml
+index c4a573d..b4fa5e3 100644
+--- a/mobile/android/app/src/main/res/values-night-v31/styles.xml
++++ b/mobile/android/app/src/main/res/values-night-v31/styles.xml
+@@ -6,7 +6,7 @@
+         <item name="android:windowFullscreen">false</item>
+         <item name="android:windowDrawsSystemBarBackgrounds">false</item>
+         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+-        <item name="android:windowSplashScreenBackground">#000000</item>
++        <item name="android:windowSplashScreenBackground">#1c1618</item>
+         <item name="android:windowSplashScreenAnimatedIcon">@drawable/android12splash</item>
+     </style>
+     <!-- Theme applied to the Android Window as soon as the process has started.
+diff --git a/mobile/android/app/src/main/res/values-v31/styles.xml b/mobile/android/app/src/main/res/values-v31/styles.xml
+index ddcdcc2..2138fd0 100644
+--- a/mobile/android/app/src/main/res/values-v31/styles.xml
++++ b/mobile/android/app/src/main/res/values-v31/styles.xml
+@@ -6,7 +6,7 @@
+         <item name="android:windowFullscreen">false</item>
+         <item name="android:windowDrawsSystemBarBackgrounds">false</item>
+         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+-        <item name="android:windowSplashScreenBackground">#f6f8fe</item>
++        <item name="android:windowSplashScreenBackground">#f7f1e8</item>
+         <item name="android:windowSplashScreenAnimatedIcon">@drawable/android12splash</item>
+     </style>
+     <!-- Theme applied to the Android Window as soon as the process has started.
+diff --git a/mobile/android/app/src/main/res/values/colors.xml b/mobile/android/app/src/main/res/values/colors.xml
+index ab98328..6cb3460 100644
+--- a/mobile/android/app/src/main/res/values/colors.xml
++++ b/mobile/android/app/src/main/res/values/colors.xml
+@@ -1,4 +1,4 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <resources>
+-    <color name="ic_launcher_background">#ffffff</color>
++    <color name="ic_launcher_background">#f7f1e8</color>
+ </resources>
+\ No newline at end of file
+diff --git a/mobile/flutter_native_splash.yaml b/mobile/flutter_native_splash.yaml
+index 1b290fb..158a3a9 100644
+--- a/mobile/flutter_native_splash.yaml
++++ b/mobile/flutter_native_splash.yaml
+@@ -11,7 +11,7 @@ flutter_native_splash:
+   # splash screen to a png image.  This is useful for gradients. The image will be stretch to the
+   # size of the app. Only one parameter can be used, color and background_image cannot both be set.
+   #background_image: "assets/immich-logo.png"
+-  color: "#f6f8fe"
++  color: "#f7f1e8"
+ 
+   # Optional parameters are listed below.  To enable a parameter, uncomment the line by removing
+   # the leading # character.
+@@ -34,7 +34,7 @@ flutter_native_splash:
+   # parameters from above. If the image_dark parameter is specified, color_dark or
+   # background_image_dark must be specified.  color_dark and background_image_dark cannot both be
+   # set.
+-  color_dark: "#000000"
++  color_dark: "#1c1618"
+   #background_image_dark: "assets/dark-background.png"
+   #image_dark: assets/splash-invert.png
+   #branding_dark: assets/dart_dark.png
+diff --git a/mobile/lib/constants/colors.dart b/mobile/lib/constants/colors.dart
+index 655d2d9..4b1d98d 100644
+--- a/mobile/lib/constants/colors.dart
++++ b/mobile/lib/constants/colors.dart
+@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
+ 
+ enum ImmichColorPreset { indigo, deepPurple, pink, red, orange, yellow, lime, green, cyan, slateGray }
+ 
+-const Color immichBrandColorLight = Color(0xFF4150AF);
+-const Color immichBrandColorDark = Color(0xFFACCBFA);
++const Color immichBrandColorLight = Color(0xFF482F74); // Kimono Photos, deep
++const Color immichBrandColorDark = Color(0xFFE2DCF0); // Kimono Photos, pale
+ const Color whiteOpacity75 = Color.fromRGBO(255, 255, 255, 0.75);
+ const Color red400 = Color(0xFFEF5350);
+ const Color grey200 = Color(0xFFEEEEEE);

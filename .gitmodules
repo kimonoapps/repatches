@@ -1,0 +1,4 @@
+[submodule "upstream/immich"]
+	path = upstream/immich
+	url = https://github.com/immich-app/immich.git
+	shallow = true

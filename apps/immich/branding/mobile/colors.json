@@ -1,0 +1,12 @@
+{
+  "accent": "#8d7fb5",
+  "ramp": {
+    "accent": "#8d7fb5",
+    "tint": "#e3e1ea",
+    "soft": "#9081bb",
+    "deep": "#482f74",
+    "contrast": "#fffdf8"
+  },
+  "ground": "#f7f1e8",
+  "night": "#1c1618"
+}

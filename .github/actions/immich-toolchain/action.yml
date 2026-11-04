@@ -1,0 +1,26 @@
+name: Patched Immich checkout
+description: Apply the Immich patches into work/immich and set up the tools to build it.
+inputs:
+  flutter:
+    description: Also install JDK 21 and the Flutter version upstream pins.
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - name: Apply patches and branding
+      shell: bash
+      run: |
+        scripts/check-pin.sh immich
+        scripts/apply.sh immich
+        scripts/versions.sh immich | tee -a "$GITHUB_ENV"
+    - if: inputs.flutter == 'true'
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: "21"
+    - if: inputs.flutter == 'true'
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: ${{ env.FLUTTER_VERSION }}
+        channel: stable
+        cache: true

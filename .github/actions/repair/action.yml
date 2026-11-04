@@ -1,0 +1,49 @@
+name: Repair patches with Claude
+description: >-
+  Runs Claude Code against the working tree to make scripts/check.sh pass
+  again, then refuses the result if it touched checks, workflows or scripts.
+inputs:
+  app: { description: App directory under apps/, required: true }
+  reason: { description: "What broke, in one line", required: true }
+  anthropic_api_key: { description: Anthropic API key, default: "" }
+  claude_code_oauth_token: { description: Claude subscription token (claude setup-token), default: "" }
+  github_token: { description: Token for the action, required: true }
+outputs:
+  passed:
+    description: "true when scripts/check.sh passes after the repair"
+    value: ${{ steps.verify.outputs.passed }}
+runs:
+  using: composite
+  steps:
+    - id: prompt
+      shell: bash
+      env: { APP: "${{ inputs.app }}", REASON: "${{ inputs.reason }}" }
+      run: |
+        {
+          echo 'text<<__PROMPT__'
+          envsubst '$APP $REASON' < .github/repair-prompt.md
+          echo '__PROMPT__'
+        } >> "$GITHUB_OUTPUT"
+    - uses: anthropics/claude-code-action@v1
+      with:
+        prompt: ${{ steps.prompt.outputs.text }}
+        anthropic_api_key: ${{ inputs.anthropic_api_key }}
+        claude_code_oauth_token: ${{ inputs.claude_code_oauth_token }}
+        github_token: ${{ inputs.github_token }}
+        claude_args: >-
+          --model claude-opus-5-5
+          --max-turns 150
+          --allowedTools Bash,Read,Edit,Write,Glob,Grep,TodoWrite
+    - name: Refuse edits to the guard rails
+      shell: bash
+      run: |
+        touched=$(git status --porcelain | awk '{print $NF}' | grep -E '^(apps/[^/]+/checks/|\.github/|scripts/|apps/[^/]+/upstream\.env$)' || true)
+        if [ -n "$touched" ]; then
+          echo "::error::The repair changed protected files; discarding it:"; echo "$touched"
+          exit 1
+        fi
+    - id: verify
+      name: Check from scratch
+      shell: bash
+      run: |
+        if scripts/check.sh "${{ inputs.app }}"; then echo passed=true >> "$GITHUB_OUTPUT"; else echo passed=false >> "$GITHUB_OUTPUT"; fi

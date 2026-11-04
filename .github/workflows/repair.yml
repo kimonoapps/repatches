@@ -1,0 +1,70 @@
+name: Repair a broken main
+
+# When the build on main fails (a new toolchain, a runner image change, a
+# patch that only broke in the full build), let Claude try to fix the patches
+# on a branch and open a PR. One attempt per failing commit.
+on:
+  workflow_run:
+    workflows: ["Kimono Photos (Immich)"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      app: { description: App, required: true, default: immich }
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  repair:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      APP: ${{ inputs.app || 'immich' }}
+      BRANCH: repair/${{ inputs.app || 'immich' }}-${{ github.event.workflow_run.head_sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          token: ${{ secrets.REPATCHES_BOT_TOKEN || github.token }}
+      - name: Skip if this commit was already tried
+        id: seen
+        run: |
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null; then echo "Already tried: $BRANCH"; echo skip=true >> "$GITHUB_OUTPUT"; fi
+      - if: steps.seen.outputs.skip != 'true'
+        uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21" }
+      - if: steps.seen.outputs.skip != 'true'
+        run: scripts/versions.sh "$APP" | grep FLUTTER_VERSION >> "$GITHUB_ENV"
+      - if: steps.seen.outputs.skip != 'true' && env.FLUTTER_VERSION != ''
+        uses: subosito/flutter-action@v2
+        with: { flutter-version: "${{ env.FLUTTER_VERSION }}", channel: stable, cache: true }
+      - if: steps.seen.outputs.skip != 'true'
+        id: first
+        continue-on-error: true
+        name: Reproduce with the full checks
+        run: scripts/check.sh "$APP" --full
+      - if: steps.seen.outputs.skip != 'true' && steps.first.outcome == 'failure'
+        id: repair
+        uses: ./.github/actions/repair
+        with:
+          app: ${{ env.APP }}
+          reason: "The ${{ env.APP }} build on main failed (run ${{ github.event.workflow_run.html_url || 'manual' }})."
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
+      - if: steps.seen.outputs.skip != 'true' && steps.first.outcome == 'failure' && steps.repair.outputs.passed == 'true'
+        env: { GH_TOKEN: "${{ secrets.REPATCHES_BOT_TOKEN || github.token }}" }
+        run: |
+          git config user.name "repatches[bot]"; git config user.email "repatches@kimono.invalid"
+          git switch -c "$BRANCH"
+          git add apps && git commit -q -m "Repair $APP patches after a failed build on main"
+          git push -u origin "$BRANCH"
+          gh pr create --base main --head "$BRANCH" --title "Repair $APP patches" --body "The build on main failed; Claude changed the patches until \`scripts/check.sh $APP\` passed. Review the patch diffs before merging.
+
+          🤖 Generated with [Claude Code](https://claude.com/claude-code)"
+      - if: steps.seen.outputs.skip != 'true' && steps.first.outcome == 'success'
+        run: echo "The full checks pass here; the failure on main didn't reproduce (likely flaky or infrastructure). Nothing to repair."

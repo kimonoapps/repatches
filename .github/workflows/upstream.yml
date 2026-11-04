@@ -1,0 +1,128 @@
+name: Follow upstream releases
+
+# Every morning: for each app, if upstream published a newer release than the
+# pin, move the pin on a branch, reapply the patches and run the quick checks.
+# Clean → open a PR. Broken → let Claude repair the patches, then open a PR
+# saying so (a draft if it still fails). Merging is always a person's call;
+# the PR's own CI runs the full builds.
+#
+# Pushes and PRs use REPATCHES_BOT_TOKEN (a fine-grained token with contents
+# and pull-requests write) so the PR's CI runs: GitHub doesn't start workflows
+# for pushes made with the default GITHUB_TOKEN.
+on:
+  schedule:
+    - cron: "23 5 * * *"
+  workflow_dispatch:
+    inputs:
+      app: { description: "Only this app", required: false }
+      tag: { description: "Use this upstream tag instead of the latest release", required: false }
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  look:
+    runs-on: ubuntu-latest
+    outputs:
+      bumps: ${{ steps.find.outputs.bumps }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: find
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ONLY: ${{ inputs.app }}
+          FORCED_TAG: ${{ inputs.tag }}
+        run: |
+          bumps="[]"
+          for env in apps/*/upstream.env; do
+            app=$(basename "$(dirname "$env")")
+            [ -z "$ONLY" ] || [ "$ONLY" = "$app" ] || continue
+            . "$env"
+            url=$(git config -f .gitmodules "submodule.upstream/$app.url")
+            repo=$(sed -E 's#https://github.com/([^/]+/[^/.]+)(\.git)?#\1#' <<<"$url")
+            latest=${FORCED_TAG:-$(gh api "repos/$repo/releases/latest" --jq .tag_name)}
+            newest=$(printf '%s\n%s\n' "$UPSTREAM_TAG" "$latest" | sort -V | tail -1)
+            if [ "$latest" = "$UPSTREAM_TAG" ] || [ "$newest" != "$latest" ]; then
+              echo "$app: pinned $UPSTREAM_TAG, upstream latest $latest — nothing to do"; continue
+            fi
+            branch="bump/$app-$latest"
+            if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+              echo "$app: $branch already exists — a PR is waiting"; continue
+            fi
+            echo "$app: $UPSTREAM_TAG → $latest"
+            bumps=$(jq -c --arg app "$app" --arg tag "$latest" --arg branch "$branch" '. + [{app:$app, tag:$tag, branch:$branch}]' <<<"$bumps")
+          done
+          echo "bumps=$bumps" >> "$GITHUB_OUTPUT"
+
+  bump:
+    needs: look
+    if: needs.look.outputs.bumps != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.look.outputs.bumps) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          token: ${{ secrets.REPATCHES_BOT_TOKEN || github.token }}
+      - name: Move the pin
+        env: { APP: "${{ matrix.app }}", TAG: "${{ matrix.tag }}", BRANCH: "${{ matrix.branch }}" }
+        run: |
+          git config user.name "repatches[bot]"; git config user.email "repatches@kimono.invalid"
+          git switch -c "$BRANCH"
+          git -C "upstream/$APP" fetch --depth 1 origin "refs/tags/$TAG:refs/tags/$TAG"
+          git -C "upstream/$APP" checkout -q "$TAG^{commit}"
+          sed -i "s/^UPSTREAM_TAG=.*/UPSTREAM_TAG=$TAG/" "apps/$APP/upstream.env"
+          git add "upstream/$APP" "apps/$APP/upstream.env"
+          git commit -q -m "Follow $APP $TAG"
+          scripts/check-pin.sh "$APP"
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21" }
+      - name: Flutter version upstream pins
+        run: scripts/versions.sh "${{ matrix.app }}" | grep FLUTTER_VERSION >> "$GITHUB_ENV"
+      - if: env.FLUTTER_VERSION != ''
+        uses: subosito/flutter-action@v2
+        with: { flutter-version: "${{ env.FLUTTER_VERSION }}", channel: stable, cache: true }
+      - id: first
+        name: Reapply and check
+        continue-on-error: true
+        run: scripts/check.sh "${{ matrix.app }}"
+      - id: repair
+        if: steps.first.outcome == 'failure'
+        uses: ./.github/actions/repair
+        with:
+          app: ${{ matrix.app }}
+          reason: "Moving ${{ matrix.app }} to upstream ${{ matrix.tag }} broke the patches or their checks."
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
+      - name: Push and open the PR
+        # Not when the repair step failed: that includes the guard rejecting edits to checks.
+        if: "!cancelled() && (steps.first.outcome == 'success' || steps.repair.outcome == 'success')"
+        env:
+          GH_TOKEN: ${{ secrets.REPATCHES_BOT_TOKEN || github.token }}
+          APP: ${{ matrix.app }}
+          TAG: ${{ matrix.tag }}
+          BRANCH: ${{ matrix.branch }}
+          FIRST: ${{ steps.first.outcome }}
+          REPAIRED: ${{ steps.repair.outputs.passed }}
+        run: |
+          if [ -n "$(git status --porcelain -- apps)" ]; then
+            git add apps && git commit -q -m "Repair $APP patches for $TAG"
+          fi
+          git push -u origin "$BRANCH"
+          tail_log=$(tail -n 60 "work/$APP-check.log" 2>/dev/null || true)
+          if [ "$FIRST" = success ]; then
+            state="The patches applied and the quick checks passed without changes."; draft=""
+          elif [ "$REPAIRED" = true ]; then
+            state="The patches broke on $TAG; **Claude repaired them** and the quick checks now pass. Review the patch diffs and the intent notes before merging."; draft=""
+          else
+            state="The patches broke on $TAG and the automatic repair **did not get the checks passing**. Needs a person."; draft="--draft"
+          fi
+          body=$(printf '%s\n\nUpstream release: https://github.com/%s/releases/tag/%s\n\nThis PR runs the full builds (server image, APK, iPhone). Releasing after merge: tag `%s/%s-kimono.1`.\n\n<details><summary>Last check output</summary>\n\n```\n%s\n```\n</details>\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)' \
+            "$state" "$(git config -f .gitmodules "submodule.upstream/$APP.url" | sed -E 's#https://github.com/##; s#\.git$##')" "$TAG" "$APP" "$TAG" "$tail_log")
+          gh pr create $draft --base main --head "$BRANCH" --title "Follow $APP $TAG" --body "$body"

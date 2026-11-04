@@ -1,0 +1,6 @@
+# Changes to the guard rails need the owner's review (turn on "Require review
+# from Code Owners" for main). The repair workflow also refuses them outright.
+/.github/            @akram-composio
+/scripts/            @akram-composio
+/apps/*/checks/      @akram-composio
+/apps/*/upstream.env @akram-composio

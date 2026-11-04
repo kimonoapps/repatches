@@ -1,0 +1,339 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: repatches <repatches@kimono.invalid>
+Date: Wed, 4 Nov 2026 09:15:02 -0800
+Subject: [PATCH] mobile: Give the app Kimono Photos' identity
+
+The app installs as its own app, beside the official Immich app if someone
+has both, and every name a person sees says Kimono Photos.
+
+Must survive upstream changes:
+- Android applicationId app.kimono.photos (the Kotlin namespace stays
+  app.alextran.immich so upstream's classes don't move); launcher label and
+  share/view intent labels say "Kimono Photos".
+- iOS bundle ids and App Group come from ios/Signing.xcconfig:
+  app.kimono.photos / app.kimono.photos.dev / group.app.kimono.photos, team
+  left empty (CI passes DEVELOPMENT_TEAM). Display name "Kimono Photos".
+- Link scheme kimono-photos:// replaces immich:// everywhere it is declared
+  or built (manifest, Info.plist, router, home-screen widgets).
+- OAuth callback scheme app.kimono.photos:///oauth-callback replaces
+  app.immich:///oauth-callback; Kimono registers it as a redirect URI.
+- Immich's my.immich.app universal links are removed (domain we don't own).
+
+diff --git a/mobile/android/app/build.gradle b/mobile/android/app/build.gradle
+index 7e3d67f..be1b592 100644
+--- a/mobile/android/app/build.gradle
++++ b/mobile/android/app/build.gradle
+@@ -37,7 +37,7 @@ android {
+   }
+ 
+   defaultConfig {
+-    applicationId "app.alextran.immich"
++    applicationId "app.kimono.photos"
+     minSdk = 26
+     targetSdk = flutter.targetSdkVersion
+     versionCode flutter.versionCode
+diff --git a/mobile/android/app/src/main/AndroidManifest.xml b/mobile/android/app/src/main/AndroidManifest.xml
+index 1b8d2a9..1bbab8d 100644
+--- a/mobile/android/app/src/main/AndroidManifest.xml
++++ b/mobile/android/app/src/main/AndroidManifest.xml
+@@ -25,7 +25,7 @@
+   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+ 
+-  <application android:label="Immich" android:name=".ImmichApp" android:usesCleartextTraffic="true"
++  <application android:label="Kimono Photos" android:name=".ImmichApp" android:usesCleartextTraffic="true"
+     android:icon="@mipmap/ic_launcher" android:requestLegacyExternalStorage="true"
+     android:largeHeap="true" android:enableOnBackInvokedCallback="false" android:allowBackup="false"
+     android:networkSecurityConfig="@xml/network_security_config">
+@@ -64,13 +64,13 @@
+ 
+       <!--TODO:
+       Add this filter if you want to handle shared images-->
+-      <intent-filter android:label="Upload to Immich">
++      <intent-filter android:label="Upload to Kimono Photos">
+         <action android:name="android.intent.action.SEND" />
+         <category android:name="android.intent.category.DEFAULT" />
+         <data android:mimeType="image/*" />
+       </intent-filter>
+ 
+-      <intent-filter android:label="Upload to Immich">
++      <intent-filter android:label="Upload to Kimono Photos">
+         <action android:name="android.intent.action.SEND_MULTIPLE" />
+         <category android:name="android.intent.category.DEFAULT" />
+         <data android:mimeType="image/*" />
+@@ -78,62 +78,37 @@
+ 
+       <!--TODO:
+       Add this filter if you want to handle shared videos-->
+-      <intent-filter android:label="Upload to Immich">
++      <intent-filter android:label="Upload to Kimono Photos">
+         <action android:name="android.intent.action.SEND" />
+         <category android:name="android.intent.category.DEFAULT" />
+         <data android:mimeType="video/*" />
+       </intent-filter>
+-      <intent-filter android:label="Upload to Immich">
++      <intent-filter android:label="Upload to Kimono Photos">
+         <action android:name="android.intent.action.SEND_MULTIPLE" />
+         <category android:name="android.intent.category.DEFAULT" />
+         <data android:mimeType="video/*" />
+       </intent-filter>
+ 
+       <!-- Allow Immich to act as an image viewer -->
+-      <intent-filter android:label="View in Immich">
++      <intent-filter android:label="View in Kimono Photos">
+         <action android:name="android.intent.action.VIEW" />
+         <category android:name="android.intent.category.DEFAULT" />
+         <data android:scheme="content" android:mimeType="image/*" />
+       </intent-filter>
+ 
+       <!-- Allow Immich to act as a video viewer -->
+-      <intent-filter android:label="View in Immich">
++      <intent-filter android:label="View in Kimono Photos">
+         <action android:name="android.intent.action.VIEW" />
+         <category android:name="android.intent.category.DEFAULT" />
+         <data android:scheme="content" android:mimeType="video/*" />
+       </intent-filter>
+ 
+-      <!-- immich:// URL scheme handling -->
++      <!-- kimono-photos:// links: connect, album, asset, memory, people -->
+       <intent-filter>
+         <action android:name="android.intent.action.VIEW" />
+         <category android:name="android.intent.category.DEFAULT" />
+         <category android:name="android.intent.category.BROWSABLE" />
+-        <data android:scheme="immich" />
+-      </intent-filter>
+-
+-      <!-- my.immich.app deep link -->
+-      <intent-filter android:autoVerify="true">
+-        <action android:name="android.intent.action.VIEW" />
+-        <category android:name="android.intent.category.DEFAULT" />
+-        <category android:name="android.intent.category.BROWSABLE" />
+-
+-        <data android:scheme="https" />
+-
+-        <data
+-          android:host="my.immich.app"
+-          android:path="/" />
+-        <data
+-          android:host="my.immich.app"
+-          android:pathPrefix="/albums/" />
+-        <data
+-          android:host="my.immich.app"
+-          android:pathPrefix="/people/" />
+-        <data
+-          android:host="my.immich.app"
+-          android:path="/memory" />
+-        <data
+-          android:host="my.immich.app"
+-          android:pathPrefix="/photos/" />
++        <data android:scheme="kimono-photos" />
+       </intent-filter>
+     </activity>
+ 
+@@ -145,7 +120,7 @@
+         <action android:name="android.intent.action.VIEW" />
+         <category android:name="android.intent.category.DEFAULT" />
+         <category android:name="android.intent.category.BROWSABLE" />
+-        <data android:scheme="app.immich" android:pathPrefix="/oauth-callback" />
++        <data android:scheme="app.kimono.photos" android:pathPrefix="/oauth-callback" />
+       </intent-filter>
+     </activity>
+     <!-- Don't delete the meta-data below.
+diff --git a/mobile/android/app/src/main/kotlin/app/alextran/immich/widget/ImageDownloadWorker.kt b/mobile/android/app/src/main/kotlin/app/alextran/immich/widget/ImageDownloadWorker.kt
+index 25a7ed9..b65d81e 100644
+--- a/mobile/android/app/src/main/kotlin/app/alextran/immich/widget/ImageDownloadWorker.kt
++++ b/mobile/android/app/src/main/kotlin/app/alextran/immich/widget/ImageDownloadWorker.kt
+@@ -108,7 +108,7 @@ class ImageDownloadWorker(
+             glanceId,
+             "",
+             "",
+-            "immich://",
++            "kimono-photos://",
+             WidgetState.LOG_IN
+           )
+         }
+diff --git a/mobile/android/app/src/main/kotlin/app/alextran/immich/widget/PhotoWidget.kt b/mobile/android/app/src/main/kotlin/app/alextran/immich/widget/PhotoWidget.kt
+index b1a0a9d..2fcfd6f 100644
+--- a/mobile/android/app/src/main/kotlin/app/alextran/immich/widget/PhotoWidget.kt
++++ b/mobile/android/app/src/main/kotlin/app/alextran/immich/widget/PhotoWidget.kt
+@@ -49,7 +49,7 @@ class PhotoWidget : GlanceAppWidget() {
+           .fillMaxSize()
+           .background(GlanceTheme.colors.background)
+           .clickable {
+-            val intent = Intent(Intent.ACTION_VIEW, deeplinkURL ?: "immich://".toUri())
++            val intent = Intent(Intent.ACTION_VIEW, deeplinkURL ?: "kimono-photos://".toUri())
+             intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+             context.startActivity(intent)
+           }
+diff --git a/mobile/android/app/src/main/kotlin/app/alextran/immich/widget/model/Model.kt b/mobile/android/app/src/main/kotlin/app/alextran/immich/widget/model/Model.kt
+index 545a1ed..3db0b9a 100644
+--- a/mobile/android/app/src/main/kotlin/app/alextran/immich/widget/model/Model.kt
++++ b/mobile/android/app/src/main/kotlin/app/alextran/immich/widget/model/Model.kt
+@@ -80,5 +80,5 @@ fun imageFilename(id: String): String {
+ }
+ 
+ fun assetDeeplink(asset: Asset): String {
+-  return "immich://asset?id=${asset.id}"
++  return "kimono-photos://asset?id=${asset.id}"
+ }
+diff --git a/mobile/ios/Runner/Info.plist b/mobile/ios/Runner/Info.plist
+index 31feda2..37f38d8 100644
+--- a/mobile/ios/Runner/Info.plist
++++ b/mobile/ios/Runner/Info.plist
+@@ -14,7 +14,7 @@
+     <key>CFBundleDevelopmentRegion</key>
+     <string>$(DEVELOPMENT_LANGUAGE)</string>
+     <key>CFBundleDisplayName</key>
+-    <string>${PRODUCT_NAME}</string>
++    <string>Kimono Photos</string>
+     <key>CFBundleDocumentTypes</key>
+     <array>
+       <dict>
+@@ -74,7 +74,7 @@
+       <string>zh</string>
+     </array>
+     <key>CFBundleName</key>
+-    <string>immich_mobile</string>
++    <string>Kimono Photos</string>
+     <key>CFBundlePackageType</key>
+     <string>APPL</string>
+     <key>CFBundleShortVersionString</key>
+@@ -100,7 +100,7 @@
+         <string>Deep Link</string>
+         <key>CFBundleURLSchemes</key>
+         <array>
+-          <string>immich</string>
++          <string>kimono-photos</string>
+         </array>
+       </dict>
+     </array>
+diff --git a/mobile/ios/Runner/Runner.entitlements b/mobile/ios/Runner/Runner.entitlements
+index c8a6be9..9f15cc4 100644
+--- a/mobile/ios/Runner/Runner.entitlements
++++ b/mobile/ios/Runner/Runner.entitlements
+@@ -2,10 +2,6 @@
+ <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+ <plist version="1.0">
+ <dict>
+-	<key>com.apple.developer.associated-domains</key>
+-	<array>
+-		<string>applinks:my.immich.app</string>
+-	</array>
+ 	<key>com.apple.developer.networking.wifi-info</key>
+ 	<true/>
+ 	<key>com.apple.security.application-groups</key>
+diff --git a/mobile/ios/Runner/RunnerProfile.entitlements b/mobile/ios/Runner/RunnerProfile.entitlements
+index 93a4aab..b7930d5 100644
+--- a/mobile/ios/Runner/RunnerProfile.entitlements
++++ b/mobile/ios/Runner/RunnerProfile.entitlements
+@@ -4,10 +4,6 @@
+ <dict>
+ 	<key>aps-environment</key>
+ 	<string>development</string>
+-	<key>com.apple.developer.associated-domains</key>
+-	<array>
+-		<string>applinks:my.immich.app</string>
+-	</array>
+ 	<key>com.apple.developer.networking.wifi-info</key>
+ 	<true/>
+ 	<key>com.apple.security.application-groups</key>
+diff --git a/mobile/ios/Signing.xcconfig b/mobile/ios/Signing.xcconfig
+index bd6b270..ec0d52c 100644
+--- a/mobile/ios/Signing.xcconfig
++++ b/mobile/ios/Signing.xcconfig
+@@ -10,20 +10,21 @@
+ //     IMMICH_BUNDLE_ID_DEV = com.customuniqueid.immichdev
+ //     IMMICH_GROUP_ID = group.com.customuniqueid.immich
+ 
+-// Apple Developer Team ID used for automatically provisioning signing credentials
+-IMMICH_TEAM_ID = 2W7AC6T8T5
++// Apple Developer Team ID used for automatically provisioning signing credentials.
++// Kimono passes DEVELOPMENT_TEAM on the xcodebuild command line instead.
++IMMICH_TEAM_ID =
+ 
+ // Root bundle identifier for the Release configuration.
+ // Extension suffixes (`.ShareExtension`/`.Widget`) will be appended
+-IMMICH_BUNDLE_ID_PROD = app.alextran.immich
++IMMICH_BUNDLE_ID_PROD = app.kimono.photos
+ 
+ // Root bundle identifier for the Debug and Profile configurations.
+ // Build scheme suffixes (`.debug`/`.profile`) will be appended
+-IMMICH_BUNDLE_ID_DEV = app.futo.immich
++IMMICH_BUNDLE_ID_DEV = app.kimono.photos.dev
+ 
+ // Root App Group identifier.
+ // Build scheme suffixes (`.debug`/`.profile`) will be appended
+-IMMICH_GROUP_ID = group.app.immich.share
++IMMICH_GROUP_ID = group.app.kimono.photos
+ 
+ // Optional per-developer configuration override
+ #include? "Signing.local.xcconfig"
+diff --git a/mobile/ios/WidgetExtension/ImmichAPI.swift b/mobile/ios/WidgetExtension/ImmichAPI.swift
+index 7e9dcd9..f06a911 100644
+--- a/mobile/ios/WidgetExtension/ImmichAPI.swift
++++ b/mobile/ios/WidgetExtension/ImmichAPI.swift
+@@ -48,7 +48,7 @@ struct Asset: Codable {
+   let type: AssetType
+ 
+   var deepLink: URL? {
+-    return URL(string: "immich://asset?id=\(id)")
++    return URL(string: "kimono-photos://asset?id=\(id)")
+   }
+ }
+ 
+diff --git a/mobile/lib/main.dart b/mobile/lib/main.dart
+index f576a7c..a7ae76d 100644
+--- a/mobile/lib/main.dart
++++ b/mobile/lib/main.dart
+@@ -182,10 +182,8 @@ class ImmichAppState extends ConsumerState<ImmichApp> with WidgetsBindingObserve
+     final isColdStart = currentRouteName == null || currentRouteName == SplashScreenRoute.name;
+ 
+     PageRouteInfo? route;
+-    if (deepLink.uri.scheme == "immich") {
++    if (deepLink.uri.scheme == "kimono-photos") {
+       route = await deepLinkHandler.handleScheme(deepLink, ref);
+-    } else if (deepLink.uri.host == "my.immich.app") {
+-      route = await deepLinkHandler.handleMyImmichApp(deepLink, ref);
+     } else {
+       return DeepLink.path(deepLink.path);
+     }
+diff --git a/mobile/lib/services/oauth.service.dart b/mobile/lib/services/oauth.service.dart
+index d8b1604..a739a8c 100644
+--- a/mobile/lib/services/oauth.service.dart
++++ b/mobile/lib/services/oauth.service.dart
+@@ -3,11 +3,11 @@ import 'package:immich_mobile/services/api.service.dart';
+ import 'package:logging/logging.dart';
+ import 'package:openapi/api.dart';
+ 
+-// Redirect URL = app.immich:///oauth-callback
++// Redirect URL = app.kimono.photos:///oauth-callback
+ 
+ class OAuthService {
+   final ApiService _apiService;
+-  final callbackUrlScheme = 'app.immich';
++  final callbackUrlScheme = 'app.kimono.photos';
+   final log = Logger('OAuthService');
+   OAuthService(this._apiService);
+ 
+@@ -36,8 +36,8 @@ class OAuthService {
+ 
+     log.info('Received OAuth callback: $result');
+ 
+-    if (result.startsWith('app.immich:/oauth-callback')) {
+-      result = result.replaceAll('app.immich:/oauth-callback', 'app.immich:///oauth-callback');
++    if (result.startsWith('$callbackUrlScheme:/oauth-callback')) {
++      result = result.replaceAll('$callbackUrlScheme:/oauth-callback', '$callbackUrlScheme:///oauth-callback');
+     }
+ 
+     return await _apiService.oAuthApi.finishOAuth(
+diff --git a/mobile/pubspec.yaml b/mobile/pubspec.yaml
+index 811f8fd..8778a84 100644
+--- a/mobile/pubspec.yaml
++++ b/mobile/pubspec.yaml
+@@ -1,5 +1,5 @@
+ name: immich_mobile
+-description: Immich - selfhosted backup media file on mobile phone
++description: Kimono Photos
+ 
+ publish_to: 'none'
+ version: 3.1.0+3057

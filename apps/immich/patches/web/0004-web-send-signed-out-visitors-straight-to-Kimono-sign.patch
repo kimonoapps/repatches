@@ -1,0 +1,282 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: akram-composio <akram@composio.dev>
+Date: Wed, 4 Nov 2026 09:26:50 -0800
+Subject: [PATCH] web: send signed-out visitors straight to Kimono sign-in
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Why: with Kimono, sign-in is Kimono's (an OIDC provider). Kimono sets
+oauth.enabled + oauth.autoLaunch in the config file; people must never see the
+Immich login form or a flash of it, and it must be testable with curl.
+
+What must survive upstream changes:
+- Server: the web index middleware (ApiService.ssr in server/src/services/
+  api.service.ts, the catch-all that serves index.html) answers GET/HEAD `/` and
+  `/auth/login` with a 302 to the OAuth authorize URL when OAuth is enabled with
+  autoLaunch and the request has no valid session cookie. It sets the same
+  immich_oauth_state / immich_oauth_code_verifier cookies as POST
+  /api/oauth/authorize, with redirect_uri <origin>/auth/login (the URI the web
+  app itself uses, so the existing callback page finishes the login). The
+  origin is server.externalDomain when that names the request's host (so an
+  untrusted proxy can't downgrade https), else the request's own origin.
+  Logic lives in AuthService.getOAuthAutoLaunch / isAuthenticatedRequest.
+- Escape hatches, never redirected: ?autoLaunch=0, ?password=1|true (upstream's
+  own opt-outs, still showing the password form when password login is on), and
+  OAuth callbacks (?code=… / ?error=…). Signed-in visitors get the app.
+- If the provider can't be reached (discovery fails), the server logs a warning
+  and serves the web app as usual.
+- Web: the login page draws a flat cover instead of the form while it is
+  auto-launching or completing a callback (deep links reach /auth/login
+  client-side, not via the server); the form appears only on error or opt-out.
+- Sign-out is upstream's: an OAuth session's logout returns the provider's
+  end-session URL (oauth.endSessionEndpoint or discovery), so people land on
+  Kimono's sign-out, not the Immich login page.
+- No /api behaviour changes (the phone app depends on the API).
+
+diff --git a/server/src/services/api.service.ts b/server/src/services/api.service.ts
+index 29e84ed..eda6fb3 100644
+--- a/server/src/services/api.service.ts
++++ b/server/src/services/api.service.ts
+@@ -2,11 +2,23 @@ import { Injectable, NotAcceptableException } from '@nestjs/common';
+ import { NextFunction, Request, Response } from 'express';
+ import { escape } from 'lodash';
+ import { readFileSync } from 'node:fs';
++import { ImmichCookie } from 'src/enum';
+ import { ConfigRepository } from 'src/repositories/config.repository';
+ import { LoggingRepository } from 'src/repositories/logging.repository';
+ import { AuthService } from 'src/services/auth.service';
+ import { SharedLinkService } from 'src/services/shared-link.service';
+ import { OpenGraphTags } from 'src/utils/misc';
++import { respondWithCookie } from 'src/utils/response';
++
++// Kimono: the pages a signed-out visitor may be sent to Kimono sign-in from, server-side, before any HTML.
++const AUTO_LAUNCH_PATHS = new Set(['/', '/auth/login']);
++// Upstream's own opt-outs (web/src/lib/utils.ts oauth.isAutoLaunchDisabled) plus OAuth callbacks.
++const isAutoLaunchOptOut = (query: Request['query']) =>
++  query.autoLaunch === '0' ||
++  query.password === '1' ||
++  query.password === 'true' ||
++  'code' in query ||
++  'error' in query;
+ 
+ export const render = (index: string, meta: OpenGraphTags) => {
+   const [title, description, imageUrl] = [meta.title, meta.description, meta.imageUrl].map((item) =>
+@@ -36,6 +48,38 @@ export class ApiService {
+     this.logger.setContext(ApiService.name);
+   }
+ 
++  /** Kimono: 302 a signed-out visitor to the OAuth provider when auto-launch is on, so no login form ever renders. */
++  private async redirectToOAuth(request: Request, res: Response) {
++    if (!AUTO_LAUNCH_PATHS.has(request.path) || isAutoLaunchOptOut(request.query)) {
++      return false;
++    }
++
++    try {
++      if (await this.authService.isAuthenticatedRequest(request.headers, request.path)) {
++        return false;
++      }
++
++      const autoLaunch = await this.authService.getOAuthAutoLaunch(`${request.protocol}://${request.host}`);
++      if (!autoLaunch) {
++        return false;
++      }
++
++      respondWithCookie(res, null, {
++        isSecure: request.secure,
++        values: [
++          { key: ImmichCookie.OAuthState, value: autoLaunch.state },
++          { key: ImmichCookie.OAuthCodeVerifier, value: autoLaunch.codeVerifier ?? '' },
++        ],
++      });
++      res.header('Cache-Control', 'no-store').redirect(302, autoLaunch.url);
++      return true;
++    } catch (error) {
++      // Sign-in provider unreachable: fall back to the web app, which shows the error and any password form.
++      this.logger.warn(`OAuth auto-launch failed, serving the login page: ${error}`);
++      return false;
++    }
++  }
++
+   ssr(excludePaths: string[]) {
+     const { resourcePaths } = this.configRepository.getEnv();
+ 
+@@ -63,6 +107,10 @@ export class ApiService {
+         );
+       }
+ 
++      if (await this.redirectToOAuth(request, res)) {
++        return;
++      }
++
+       let status = 200;
+       let html = index;
+ 
+diff --git a/server/src/services/auth.service.spec.ts b/server/src/services/auth.service.spec.ts
+index dad13ef..aae7d52 100644
+--- a/server/src/services/auth.service.spec.ts
++++ b/server/src/services/auth.service.spec.ts
+@@ -703,6 +703,59 @@ describe(AuthService.name, () => {
+     });
+   });
+ 
++  describe('getOAuthAutoLaunch', () => {
++    it('should do nothing when auto-launch is off', async () => {
++      mocks.systemMetadata.get.mockResolvedValue({ oauth: { enabled: true, autoLaunch: false } });
++
++      await expect(sut.getOAuthAutoLaunch('https://photos.test')).resolves.toBeNull();
++      expect(mocks.oauth.authorize).not.toHaveBeenCalled();
++    });
++
++    it('should do nothing when OAuth is disabled', async () => {
++      mocks.systemMetadata.get.mockResolvedValue({ oauth: { enabled: false, autoLaunch: true } });
++
++      await expect(sut.getOAuthAutoLaunch('https://photos.test')).resolves.toBeNull();
++    });
++
++    it('should authorize back to the web login page', async () => {
++      mocks.systemMetadata.get.mockResolvedValue({ oauth: { enabled: true, autoLaunch: true } });
++      mocks.oauth.authorize.mockResolvedValue({ url: 'https://idp/authorize', state: 's', codeVerifier: 'v' });
++
++      await expect(sut.getOAuthAutoLaunch('https://photos.test')).resolves.toEqual({
++        url: 'https://idp/authorize',
++        state: 's',
++        codeVerifier: 'v',
++      });
++      expect(mocks.oauth.authorize).toHaveBeenCalledWith(
++        expect.objectContaining({ autoLaunch: true }),
++        'https://photos.test/auth/login',
++      );
++    });
++
++    it('should prefer the external domain for the same host', async () => {
++      mocks.systemMetadata.get.mockResolvedValue({
++        oauth: { enabled: true, autoLaunch: true },
++        server: { externalDomain: 'https://photos.example/' },
++      });
++      mocks.oauth.authorize.mockResolvedValue({ url: 'https://idp/authorize', state: 's', codeVerifier: 'v' });
++
++      // eslint-disable-next-line unicorn/prefer-https
++      await sut.getOAuthAutoLaunch('http://photos.example');
++      expect(mocks.oauth.authorize).toHaveBeenCalledWith(expect.anything(), 'https://photos.example/auth/login');
++    });
++
++    it('should keep the request origin for another host', async () => {
++      mocks.systemMetadata.get.mockResolvedValue({
++        oauth: { enabled: true, autoLaunch: true },
++        server: { externalDomain: 'https://photos.example' },
++      });
++      mocks.oauth.authorize.mockResolvedValue({ url: 'https://idp/authorize', state: 's', codeVerifier: 'v' });
++
++      await sut.getOAuthAutoLaunch('https://10.0.0.2:2283');
++      expect(mocks.oauth.authorize).toHaveBeenCalledWith(expect.anything(), 'https://10.0.0.2:2283/auth/login');
++    });
++  });
++
+   describe('callback', () => {
+     it('should throw an error if OAuth is not enabled', async () => {
+       await expect(
+diff --git a/server/src/services/auth.service.ts b/server/src/services/auth.service.ts
+index f3be40f..690a4d8 100644
+--- a/server/src/services/auth.service.ts
++++ b/server/src/services/auth.service.ts
+@@ -292,6 +292,42 @@ export class AuthService extends BaseService {
+     );
+   }
+ 
++  /**
++   * Kimono: when OAuth auto-launch is on, a signed-out browser opening the web app is sent straight to the
++   * identity provider instead of the login page. Returns the authorize URL plus the state/PKCE values the
++   * caller must set as cookies (exactly what POST /oauth/authorize does), or null when auto-launch is off.
++   */
++  async getOAuthAutoLaunch(origin: string) {
++    const { oauth, server } = await this.getConfig({ withCache: false });
++    if (!oauth.enabled || !oauth.autoLaunch) {
++      return null;
++    }
++
++    // Must match what the web app sends as redirectUri: <origin>/auth/login, query string stripped. The
++    // external domain wins when it names the same host, so a proxy that hides https cannot downgrade it.
++    const { externalDomain } = server;
++    const sameHost = !!externalDomain && new URL(externalDomain).host === new URL(origin).host;
++    const base = sameHost ? externalDomain.replace(/\/+$/, '') : origin;
++    return await this.oauthRepository.authorize(oauth, `${base}/auth/login`);
++  }
++
++  async isAuthenticatedRequest(headers: IncomingHttpHeaders, uri: string) {
++    if (!this.getCookieToken(headers)) {
++      return false;
++    }
++
++    try {
++      await this.authenticate({
++        headers,
++        queryParams: {},
++        metadata: { adminRoute: false, sharedLinkRoute: false, uri },
++      });
++      return true;
++    } catch {
++      return false;
++    }
++  }
++
+   async callback(dto: OAuthCallbackDto, headers: IncomingHttpHeaders, loginDetails: LoginDetails) {
+     const { oauth } = await this.getConfig({ withCache: false });
+     if (!oauth.enabled) {
+diff --git a/web/src/routes/auth/login/+page.svelte b/web/src/routes/auth/login/+page.svelte
+index 78cd5fd..46a9b3f 100644
+--- a/web/src/routes/auth/login/+page.svelte
++++ b/web/src/routes/auth/login/+page.svelte
+@@ -25,6 +25,13 @@
+   let oauthError = $state('');
+   let loading = $state(false);
+   let oauthLoading = $state(true);
++  // Kimono: while handing off to (or returning from) Kimono sign-in, draw nothing — no login form flash.
++  let redirecting = $state(
++    featureFlagsManager.value.oauth &&
++      (oauth.isCallback(location) ||
++        (featureFlagsManager.value.oauthAutoLaunch && !oauth.isAutoLaunchDisabled(location)) ||
++        oauth.isAutoLaunchEnabled(location)),
++  );
+ 
+   const serverConfig = $derived(serverConfigManager.value);
+ 
+@@ -57,6 +64,7 @@
+         console.error('Error [login-form] [oauth.callback]', error);
+         oauthError = getServerErrorMessage(error) || $t('errors.unable_to_complete_oauth_login');
+         oauthLoading = false;
++        redirecting = false;
+         return;
+       }
+     }
+@@ -67,14 +75,16 @@
+         oauth.isAutoLaunchEnabled(location)
+       ) {
+         await goto(Route.login({ autoLaunch: 0 }), { replaceState: true });
+-        await oauth.authorize(location);
+-        return;
++        if (await oauth.authorize(location)) {
++          return;
++        }
+       }
+     } catch (error) {
+       handleError(error, $t('errors.unable_to_connect'));
+     }
+ 
+     oauthLoading = false;
++    redirecting = false;
+   });
+ 
+   const handleLogin = async () => {
+@@ -126,6 +136,11 @@
+   };
+ </script>
+ 
++<!-- Kimono: a flat cover while handing off to Kimono sign-in, so the form never flashes. -->
++{#if redirecting}
++  <div class="fixed inset-0 z-50 bg-white dark:bg-black"></div>
++{/if}
++
+ <AuthPageLayout title={data.meta.title}>
+   <Stack gap={4}>
+     {#if serverConfig.loginPageMessage}

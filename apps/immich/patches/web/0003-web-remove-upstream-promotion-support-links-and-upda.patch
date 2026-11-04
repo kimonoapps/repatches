@@ -1,0 +1,411 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: akram-composio <akram@composio.dev>
+Date: Wed, 4 Nov 2026 09:26:50 -0800
+Subject: [PATCH] web: remove upstream promotion, support links and update nags
+
+Why: Kimono Photos is part of a household platform that Kimono updates and
+supports. Purchase/licence prompts, "new version" announcements and links to
+immich.app, GitHub or Discord are noise or point people at the wrong place.
+
+What must survive upstream changes:
+- Sidebar bottom shows storage only: no PurchaseInfo (buy/supporter) and no
+  ServerStatus (version + "new version available" link to GitHub).
+- User settings have no Purchase section.
+- Account panel has no "Support & feedback" button (HelpAndFeedbackModal with
+  docs/GitHub/Discord links is unreachable).
+- No VersionAnnouncement modal on release events (root +layout.svelte).
+- No "My Immich link" command (copies a my.immich.app URL) in the palette.
+- Error page has no Discord / changelog / docker-help links.
+- Admin, onboarding, maintenance and duplicates copy keeps its wording but no
+  longer links to docs.immich.app (the <Link> is replaced by the bare message).
+- Routes such as /buy and /link stay (nothing links to them) to keep the diff small.
+
+diff --git a/web/src/lib/commands.ts b/web/src/lib/commands.ts
+index 0673285..78fbb41 100644
+--- a/web/src/lib/commands.ts
++++ b/web/src/lib/commands.ts
+@@ -29,11 +29,9 @@ import {
+ } from '@mdi/js';
+ import type { MessageFormatter } from 'svelte-i18n';
+ import { goto } from '$app/navigation';
+-import { page } from '$app/state';
+ import { authManager } from '$lib/managers/auth-manager.svelte';
+ import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
+ import { Route } from '$lib/route';
+-import { copyToClipboard } from '$lib/utils';
+ 
+ export const getPagesProvider = ($t: MessageFormatter) => {
+   const adminPages: ActionItem[] = [
+@@ -209,10 +207,6 @@ export const getPagesProvider = ($t: MessageFormatter) => {
+   return defaultProvider({ name: $t('page'), actions: [...userPages, ...utilityPages, ...adminPages] });
+ };
+ 
+-const getMyImmichLink = () => {
+-  return new URL(page.url.pathname + page.url.search, 'https://my.immich.app');
+-};
+-
+ export const getSettingsProvider = ($t: MessageFormatter) => {
+   const settings: ActionItem[] = [
+     {
+@@ -236,12 +230,6 @@ export const getSettingsProvider = ($t: MessageFormatter) => {
+       icon: mdiKeyboard,
+       onAction: () => screencastManager.toggle(),
+     },
+-    {
+-      title: $t('my_immich_title'),
+-      description: $t('my_immich_description'),
+-      onAction: () => copyToClipboard(getMyImmichLink().href),
+-      shortcuts: { ctrl: true, shift: true, key: 'm' },
+-    },
+   ];
+ 
+   return defaultProvider({ name: $t('command'), actions: settings });
+diff --git a/web/src/lib/components/admin-settings/StorageTemplateSettings.svelte b/web/src/lib/components/admin-settings/StorageTemplateSettings.svelte
+index e22808b..1f8438e 100644
+--- a/web/src/lib/components/admin-settings/StorageTemplateSettings.svelte
++++ b/web/src/lib/components/admin-settings/StorageTemplateSettings.svelte
+@@ -12,7 +12,7 @@
+   import { Route } from '$lib/route';
+   import { handleSystemConfigSave } from '$lib/services/system-config.service';
+   import { getStorageTemplateOptions, type SystemConfigTemplateStorageOptionDto } from '@immich/sdk';
+-  import { Heading, Link, LoadingSpinner, Text } from '@immich/ui';
++  import { Heading, LoadingSpinner, Text } from '@immich/ui';
+   import handlebar from 'handlebars';
+   import * as luxon from 'luxon';
+   import { onDestroy } from 'svelte';
+@@ -112,11 +112,9 @@
+       <FormatMessage key="admin.storage_template_more_details">
+         {#snippet children({ tag, message })}
+           {#if tag === 'template-link'}
+-            <Link href="https://docs.immich.app/administration/storage-template">{message}</Link>
++            {message}
+           {:else if tag === 'implications-link'}
+-            <Link href="https://docs.immich.app/administration/backup-and-restore#asset-types-and-storage-locations">
+-              {message}
+-            </Link>
++            {message}
+           {/if}
+         {/snippet}
+       </FormatMessage>
+diff --git a/web/src/lib/components/shared-components/navigation-bar/AccountInfoPanel.svelte b/web/src/lib/components/shared-components/navigation-bar/AccountInfoPanel.svelte
+index 6242309..2a4208f 100644
+--- a/web/src/lib/components/shared-components/navigation-bar/AccountInfoPanel.svelte
++++ b/web/src/lib/components/shared-components/navigation-bar/AccountInfoPanel.svelte
+@@ -3,13 +3,9 @@
+   import { focusTrap } from '$lib/actions/focus-trap';
+   import { authManager } from '$lib/managers/auth-manager.svelte';
+   import AvatarEditModal from '$lib/modals/AvatarEditModal.svelte';
+-  import HelpAndFeedbackModal from '$lib/modals/HelpAndFeedbackModal.svelte';
+   import { Route } from '$lib/route';
+-  import { userInteraction } from '$lib/stores/user.svelte';
+-  import { getAboutInfo, type ServerAboutResponseDto } from '@immich/sdk';
+   import { Button, Icon, IconButton, modalManager } from '@immich/ui';
+   import { mdiCog, mdiLogout, mdiPencil, mdiWrench } from '@mdi/js';
+-  import { onMount } from 'svelte';
+   import { t } from 'svelte-i18n';
+   import { fade } from 'svelte/transition';
+   import UserAvatar from '../UserAvatar.svelte';
+@@ -19,12 +15,6 @@
+   };
+ 
+   let { onClose }: Props = $props();
+-
+-  let info: ServerAboutResponseDto | undefined = $state();
+-
+-  onMount(async () => {
+-    info = userInteraction.aboutInfo ?? (await getAboutInfo());
+-  });
+ </script>
+ 
+ <div
+@@ -103,18 +93,5 @@
+       variant="ghost"
+       color="secondary">{$t('sign_out')}</Button
+     >
+-
+-    <button
+-      type="button"
+-      class="mt-4 text-center text-xs text-primary underline"
+-      onclick={async () => {
+-        onClose?.();
+-        if (info) {
+-          await modalManager.show(HelpAndFeedbackModal, { info });
+-        }
+-      }}
+-    >
+-      {$t('support_and_feedback')}
+-    </button>
+   </div>
+ </div>
+diff --git a/web/src/lib/components/shared-components/side-bar/BottomInfo.svelte b/web/src/lib/components/shared-components/side-bar/BottomInfo.svelte
+index 6d966e2..144b4b8 100644
+--- a/web/src/lib/components/shared-components/side-bar/BottomInfo.svelte
++++ b/web/src/lib/components/shared-components/side-bar/BottomInfo.svelte
+@@ -1,6 +1,4 @@
+ <script lang="ts">
+-  import PurchaseInfo from './PurchaseInfo.svelte';
+-  import ServerStatus from './ServerStatus.svelte';
+   import StorageSpace from './StorageSpace.svelte';
+ </script>
+ 
+@@ -8,8 +6,4 @@
+   <StorageSpace />
+ </div>
+ 
+-<PurchaseInfo />
+-
+-<div class="mt-2 mb-6">
+-  <ServerStatus />
+-</div>
++<div class="mb-6"></div>
+diff --git a/web/src/lib/modals/AuthDisableLoginConfirmModal.svelte b/web/src/lib/modals/AuthDisableLoginConfirmModal.svelte
+index d9e215d..5d6a203 100644
+--- a/web/src/lib/modals/AuthDisableLoginConfirmModal.svelte
++++ b/web/src/lib/modals/AuthDisableLoginConfirmModal.svelte
+@@ -1,6 +1,6 @@
+ <script lang="ts">
+   import FormatMessage from '$lib/elements/FormatMessage.svelte';
+-  import { ConfirmModal, Link } from '@immich/ui';
++  import { ConfirmModal } from '@immich/ui';
+   import { mdiCancel } from '@mdi/js';
+   import { t } from 'svelte-i18n';
+ 
+@@ -18,7 +18,7 @@
+       <p>
+         <FormatMessage key="admin.authentication_settings_reenable">
+           {#snippet children({ message })}
+-            <Link href="https://docs.immich.app/administration/server-commands">{message}</Link>
++            {message}
+           {/snippet}
+         </FormatMessage>
+       </p>
+diff --git a/web/src/routes/(user)/user-settings/UserSettingsList.svelte b/web/src/routes/(user)/user-settings/UserSettingsList.svelte
+index 91c3256..3e55b28 100644
+--- a/web/src/routes/(user)/user-settings/UserSettingsList.svelte
++++ b/web/src/routes/(user)/user-settings/UserSettingsList.svelte
+@@ -4,7 +4,6 @@
+   import DownloadSettings from './DownloadSettings.svelte';
+   import FeatureSettings from './FeatureSettings.svelte';
+   import NotificationsSettings from './NotificationsSettings.svelte';
+-  import UserPurchaseSettings from './UserPurchaseSettings.svelte';
+   import UserUsageStatistic from './UserUsageStatistic.svelte';
+   import { OpenQueryParam, QueryParameter } from '$lib/constants';
+   import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
+@@ -20,7 +19,6 @@
+     mdiDownload,
+     mdiFeatureSearchOutline,
+     mdiFormTextboxPassword,
+-    mdiKeyOutline,
+     mdiLockSmart,
+     mdiServerOutline,
+     mdiTwoFactorAuthentication,
+@@ -147,13 +145,3 @@
+ >
+   <ChangePinCodeSettings />
+ </SettingAccordion>
+-
+-<SettingAccordion
+-  icon={mdiKeyOutline}
+-  key={OpenQueryParam.PURCHASE_SETTINGS}
+-  title={$t('user_purchase_settings')}
+-  subtitle={$t('user_purchase_settings_description')}
+-  autoScrollTo={true}
+->
+-  <UserPurchaseSettings />
+-</SettingAccordion>
+diff --git a/web/src/routes/(user)/utilities/duplicates/[[photos=photos]]/[[assetId=id]]/+page.svelte b/web/src/routes/(user)/utilities/duplicates/[[photos=photos]]/[[assetId=id]]/+page.svelte
+index f673abe..3475642 100644
+--- a/web/src/routes/(user)/utilities/duplicates/[[photos=photos]]/[[assetId=id]]/+page.svelte
++++ b/web/src/routes/(user)/utilities/duplicates/[[photos=photos]]/[[assetId=id]]/+page.svelte
+@@ -3,7 +3,6 @@
+   import { page } from '$app/state';
+   import { shortcuts } from '$lib/actions/shortcut';
+   import UserPageLayout from '$lib/components/layouts/UserPageLayout.svelte';
+-  import LinkToDocs from './LinkToDocs.svelte';
+   import DuplicatesCompareControl from './DuplicatesCompareControl.svelte';
+   import { assetViewerManager } from '$lib/managers/asset-viewer-manager.svelte';
+   import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
+@@ -255,7 +254,7 @@
+   <div>
+     {#if duplicates && duplicates.length > 0}
+       <Text size="small" color="muted" class="mb-4">
+-        <p>{$t('duplicates_description')} <LinkToDocs href="https://docs.immich.app/features/duplicates-utility" /></p>
++        <p>{$t('duplicates_description')}</p>
+       </Text>
+ 
+       {#key duplicates[duplicatesIndex].duplicateId}
+diff --git a/web/src/routes/+layout.svelte b/web/src/routes/+layout.svelte
+index 9358bc7..214a29e 100644
+--- a/web/src/routes/+layout.svelte
++++ b/web/src/routes/+layout.svelte
+@@ -7,7 +7,6 @@
+   import OnEvents from '$lib/components/OnEvents.svelte';
+   import NavigationLoadingBar from './NavigationLoadingBar.svelte';
+   import UploadPanel from './UploadPanel.svelte';
+-  import VersionAnnouncement from './VersionAnnouncement.svelte';
+   import { authManager } from '$lib/managers/auth-manager.svelte';
+   import { eventManager } from '$lib/managers/event-manager.svelte';
+   import { serverConfigManager } from '$lib/managers/server-config-manager.svelte';
+@@ -232,8 +231,6 @@
+ 
+ <OnEvents {onWebsocketConnect} />
+ 
+-<VersionAnnouncement />
+-
+ <svelte:head>
+   <title>{page.data.meta?.title ? `${page.data.meta.title} - Kimono Photos` : 'Kimono Photos'}</title>
+   <link rel="manifest" href="/manifest.json" crossorigin="use-credentials" />
+diff --git a/web/src/routes/ErrorLayout.svelte b/web/src/routes/ErrorLayout.svelte
+index 8976e88..85f7a16 100644
+--- a/web/src/routes/ErrorLayout.svelte
++++ b/web/src/routes/ErrorLayout.svelte
+@@ -1,19 +1,7 @@
+ <script lang="ts">
+   import { copyToClipboard } from '$lib/utils';
+-  import {
+-    Card,
+-    CardBody,
+-    CardFooter,
+-    CardHeader,
+-    CardTitle,
+-    Icon,
+-    IconButton,
+-    Link,
+-    Logo,
+-    Text,
+-    VStack,
+-  } from '@immich/ui';
+-  import { mdiAlarmLight, mdiCodeTags, mdiContentCopy, mdiMessage, mdiPartyPopper } from '@mdi/js';
++  import { Card, CardBody, CardHeader, CardTitle, Icon, IconButton, Link, Logo, Text } from '@immich/ui';
++  import { mdiAlarmLight, mdiContentCopy } from '@mdi/js';
+   import { t } from 'svelte-i18n';
+ 
+   interface Props {
+@@ -64,27 +52,6 @@
+             <pre id="stacktrace" class="text-xs">{error.stack}</pre>
+           {/if}
+         </CardBody>
+-
+-        <CardFooter class="items-start">
+-          <Link href="https://discord.immich.app" class="flex grow basis-0 justify-center">
+-            <VStack>
+-              <Icon icon={mdiMessage} size="24" />
+-              <Text size="small" class="text-center">{$t('get_help')}</Text>
+-            </VStack>
+-          </Link>
+-          <Link href="https://github.com/immich-app/immich/releases" class="flex grow basis-0 justify-center">
+-            <VStack>
+-              <Icon icon={mdiPartyPopper} size="24" />
+-              <Text size="small" class="text-center">{$t('read_changelog')}</Text>
+-            </VStack>
+-          </Link>
+-          <Link href="https://docs.immich.app/guides/docker-help" class="flex grow basis-0 justify-center">
+-            <VStack>
+-              <Icon icon={mdiCodeTags} size="24" />
+-              <Text size="small" class="text-center">{$t('check_logs')}</Text>
+-            </VStack>
+-          </Link>
+-        </CardFooter>
+       </Card>
+     </div>
+   </div>
+diff --git a/web/src/routes/admin/system-settings/AuthSettings.svelte b/web/src/routes/admin/system-settings/AuthSettings.svelte
+index 22118d9..d772ed7 100644
+--- a/web/src/routes/admin/system-settings/AuthSettings.svelte
++++ b/web/src/routes/admin/system-settings/AuthSettings.svelte
+@@ -10,7 +10,7 @@
+   import AuthDisableLoginConfirmModal from '$lib/modals/AuthDisableLoginConfirmModal.svelte';
+   import { handleError } from '$lib/utils/handle-error';
+   import { OAuthTokenEndpointAuthMethod, unlinkAllOAuthAccountsAdmin } from '@immich/sdk';
+-  import { Button, Link, modalManager, Text, toastManager } from '@immich/ui';
++  import { Button, modalManager, Text, toastManager } from '@immich/ui';
+   import { mdiRestart } from '@mdi/js';
+   import { t } from 'svelte-i18n';
+   import { fade } from 'svelte/transition';
+@@ -75,7 +75,7 @@
+             <Text size="small">
+               <FormatMessage key="admin.oauth_settings_more_details">
+                 {#snippet children({ message })}
+-                  <Link href="https://docs.immich.app/administration/oauth">{message}</Link>
++                  {message}
+                 {/snippet}
+               </FormatMessage>
+             </Text>
+diff --git a/web/src/routes/admin/system-settings/MapSettings.svelte b/web/src/routes/admin/system-settings/MapSettings.svelte
+index 07eb529..508002e 100644
+--- a/web/src/routes/admin/system-settings/MapSettings.svelte
++++ b/web/src/routes/admin/system-settings/MapSettings.svelte
+@@ -7,7 +7,6 @@
+   import FormatMessage from '$lib/elements/FormatMessage.svelte';
+   import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
+   import { systemConfigManager } from '$lib/managers/system-config-manager.svelte';
+-  import { Link } from '@immich/ui';
+   import { t } from 'svelte-i18n';
+   import { fade } from 'svelte/transition';
+ 
+@@ -55,7 +54,7 @@
+             <p class="text-sm dark:text-immich-dark-fg">
+               <FormatMessage key="admin.map_manage_reverse_geocoding_settings">
+                 {#snippet children({ message })}
+-                  <Link href="https://docs.immich.app/features/reverse-geocoding">{message}</Link>
++                  {message}
+                 {/snippet}
+               </FormatMessage>
+             </p>
+diff --git a/web/src/routes/auth/onboarding/OnboardingBackup.svelte b/web/src/routes/auth/onboarding/OnboardingBackup.svelte
+index ce64f64..c3bb751 100644
+--- a/web/src/routes/auth/onboarding/OnboardingBackup.svelte
++++ b/web/src/routes/auth/onboarding/OnboardingBackup.svelte
+@@ -47,7 +47,7 @@
+       <p>
+         <FormatMessage key="admin.backup_onboarding_footer">
+           {#snippet children({ message })}
+-            <Link href="https://docs.immich.app/administration/backup-and-restore/">{message}</Link>
++            {message}
+           {/snippet}
+         </FormatMessage>
+       </p>
+diff --git a/web/src/routes/auth/onboarding/OnboardingStorageTemplate.svelte b/web/src/routes/auth/onboarding/OnboardingStorageTemplate.svelte
+index aea4d73..342f5b7 100644
+--- a/web/src/routes/auth/onboarding/OnboardingStorageTemplate.svelte
++++ b/web/src/routes/auth/onboarding/OnboardingStorageTemplate.svelte
+@@ -2,14 +2,13 @@
+   import StorageTemplateSettings from '$lib/components/admin-settings/StorageTemplateSettings.svelte';
+   import FormatMessage from '$lib/elements/FormatMessage.svelte';
+   import { authManager } from '$lib/managers/auth-manager.svelte';
+-  import { Link } from '@immich/ui';
+ </script>
+ 
+ <div class="flex flex-col">
+   <p>
+     <FormatMessage key="admin.storage_template_onboarding_description_v2">
+       {#snippet children({ message })}
+-        <Link href="https://docs.immich.app/administration/storage-template">{message}</Link>
++        {message}
+       {/snippet}
+     </FormatMessage>
+   </p>
+diff --git a/web/src/routes/maintenance/+page.svelte b/web/src/routes/maintenance/+page.svelte
+index 5662316..f44c7c3 100644
+--- a/web/src/routes/maintenance/+page.svelte
++++ b/web/src/routes/maintenance/+page.svelte
+@@ -6,7 +6,7 @@
+   import { handleSetMaintenanceMode } from '$lib/services/maintenance.service';
+   import { maintenanceStore } from '$lib/stores/maintenance.store';
+   import { MaintenanceAction } from '@immich/sdk';
+-  import { Button, Heading, Link, ProgressBar, Scrollable, Text } from '@immich/ui';
++  import { Button, Heading, ProgressBar, Scrollable, Text } from '@immich/ui';
+   import { t } from 'svelte-i18n';
+   import type { PageData } from './$types';
+ 
+@@ -73,9 +73,7 @@
+         <FormatMessage key="maintenance_description">
+           {#snippet children({ tag, message })}
+             {#if tag === 'link'}
+-              <Link href="https://docs.immich.app/administration/maintenance-mode">
+-                {message}
+-              </Link>
++              {message}
+             {/if}
+           {/snippet}
+         </FormatMessage>
