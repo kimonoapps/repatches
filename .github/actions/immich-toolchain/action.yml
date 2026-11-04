@@ -18,9 +18,13 @@ runs:
       with:
         distribution: temurin
         java-version: "21"
+    # Gradle's downloads and build cache, kept between runs.
+    - if: inputs.flutter == 'true'
+      uses: gradle/actions/setup-gradle@v4
     - if: inputs.flutter == 'true'
       uses: subosito/flutter-action@v2
       with:
         flutter-version: ${{ env.FLUTTER_VERSION }}
         channel: stable
-        cache: true
+        cache: true          # the Flutter SDK
+        pub-cache: true      # Dart packages

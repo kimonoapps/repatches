@@ -77,7 +77,7 @@ GitHub, but never edit it.
 
 | Secret | For |
 | --- | --- |
-| `GHCR_TOKEN` (+ `GHCR_USERNAME`) | pushing to `ghcr.io/kimonoapps` (write:packages) |
+| `GHCR_TOKEN` (+ `GHCR_USERNAME`), optional | only if an org policy stops the built-in token publishing `ghcr.io/kimonoapps/kimono-photos-server` |
 | `KIMONO_ANDROID_KEYSTORE`, `KIMONO_ANDROID_KEYSTORE_PASSWORD` | in the `mobile-release` environment: the Kimono signing key (base64 .jks, alias `kimono`) |
 | `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY`, `APPLE_TEAM_ID` | in `mobile-release`: App Store Connect API key for TestFlight |
 | `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` | the repair job (`claude setup-token` makes the latter) |

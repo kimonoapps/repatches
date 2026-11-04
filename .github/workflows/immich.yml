@@ -28,23 +28,32 @@ jobs:
   web:
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
         with: { submodules: true }
       - uses: ./.github/actions/immich-toolchain
       - uses: docker/setup-buildx-action@v3
+      # Lets buildx use GitHub's cache directly, so unchanged layers (server
+      # dependencies, the web build when only the server changed) aren't rebuilt.
+      - uses: crazy-max/ghaction-github-runtime@v3
       - name: Build the server image (web app included)
+        env:
+          BUILD_ARGS: --cache-from type=gha,scope=immich-server --cache-to type=gha,mode=max,scope=immich-server
         run: apps/immich/build/web-image.sh "$IMAGE:$VERSION"
       - name: Check it
         run: apps/immich/checks/web.sh work/immich --image "$IMAGE:$VERSION"
-      # ghcr.io/kimonoapps is an organisation GITHUB_TOKEN can't write to from
-      # here: publishing needs a token with write:packages, as GHCR_TOKEN.
+      # The image is a package of this repository, so the built-in token can
+      # publish it. GHCR_TOKEN (write:packages) overrides that if an org policy
+      # ever blocks it.
       - if: env.RELEASE == 'true'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ secrets.GHCR_USERNAME || github.actor }}
-          password: ${{ secrets.GHCR_TOKEN }}
+          password: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
       - if: env.RELEASE == 'true'
         name: Publish
         run: docker push "$IMAGE:$VERSION"
@@ -74,6 +83,15 @@ jobs:
         with: { submodules: true }
       - uses: ./.github/actions/immich-toolchain
         with: { flutter: "true" }
+      # CocoaPods and Swift packages, kept between runs.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/CocoaPods
+            work/immich/mobile/ios/Pods
+            ${{ runner.temp }}/spm
+          key: ios-deps-${{ hashFiles('work/immich/mobile/ios/Podfile.lock', 'work/immich/mobile/ios/Runner.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'work/immich/mobile/pubspec.lock') }}
+          restore-keys: ios-deps-
       - name: Build for iPhone, unsigned
         working-directory: work/immich/mobile
         run: |
@@ -86,7 +104,7 @@ jobs:
           # iOS instead of the Mac, and they fail with "produced malformed response").
           flutter build ios --release --no-codesign --config-only --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
           xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner -configuration Release \
-            -destination 'generic/platform=iOS' -skipMacroValidation CODE_SIGNING_ALLOWED=NO build
+            -destination 'generic/platform=iOS' -skipMacroValidation -clonedSourcePackagesDirPath "$RUNNER_TEMP/spm" CODE_SIGNING_ALLOWED=NO build
 
   release-android:
     if: startsWith(github.ref, 'refs/tags/immich/v')
@@ -138,6 +156,15 @@ jobs:
         with: { submodules: true }
       - uses: ./.github/actions/immich-toolchain
         with: { flutter: "true" }
+      # CocoaPods and Swift packages, kept between runs.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/CocoaPods
+            work/immich/mobile/ios/Pods
+            ${{ runner.temp }}/spm
+          key: ios-deps-${{ hashFiles('work/immich/mobile/ios/Podfile.lock', 'work/immich/mobile/ios/Runner.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'work/immich/mobile/pubspec.lock') }}
+          restore-keys: ios-deps-
       - name: Archive and send to TestFlight
         working-directory: work/immich/mobile
         env:
@@ -154,7 +181,7 @@ jobs:
           KEY="$RUNNER_TEMP/asc.p8"; printf '%s' "$ASC_KEY" > "$KEY"
           AUTH=(-allowProvisioningUpdates -authenticationKeyPath "$KEY" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID")
           xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner -configuration Release \
-            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/Photos.xcarchive" archive "${AUTH[@]}" -skipMacroValidation \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/Photos.xcarchive" archive "${AUTH[@]}" -skipMacroValidation -clonedSourcePackagesDirPath "$RUNNER_TEMP/spm" \
             IMMICH_TEAM_ID="$APPLE_TEAM_ID" DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Automatic
           cat > "$RUNNER_TEMP/export.plist" <<PLIST
           <?xml version="1.0" encoding="UTF-8"?>
@@ -191,6 +218,13 @@ jobs:
           cd work/immich
           export GIT_AUTHOR_NAME=repatches GIT_AUTHOR_EMAIL=repatches@kimono.invalid GIT_COMMITTER_NAME=repatches GIT_COMMITTER_EMAIL=repatches@kimono.invalid
           PIN=$(git -C "$GITHUB_WORKSPACE" ls-files -s upstream/immich | awk '{print $2}')
-          base=$(git commit-tree "$PIN^{tree}" -m "Immich $UPSTREAM_TAG ($PIN), unmodified")
-          top=$(git commit-tree "HEAD^{tree}" -p "$base" -m "Kimono Photos: patches and branding from $GITHUB_REPOSITORY@$GITHUB_SHA")
+          # Upstream's .github/ is left out: GitHub won't let this token push workflow
+          # files, and they must not run here anyway.
+          without_github() {
+            GIT_INDEX_FILE="$RUNNER_TEMP/patched-index" git read-tree "$1"
+            GIT_INDEX_FILE="$RUNNER_TEMP/patched-index" git rm -r -q --cached --ignore-unmatch .github
+            GIT_INDEX_FILE="$RUNNER_TEMP/patched-index" git write-tree
+          }
+          base=$(git commit-tree "$(without_github "$PIN^{tree}")" -m "Immich $UPSTREAM_TAG ($PIN), unmodified (without .github/)")
+          top=$(git commit-tree "$(without_github "HEAD^{tree}")" -p "$base" -m "Kimono Photos: patches and branding from $GITHUB_REPOSITORY@$GITHUB_SHA")
           git push --force "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git" "$top:refs/heads/patched/immich"
