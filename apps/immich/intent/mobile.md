@@ -15,6 +15,7 @@ make a patch pass.
 | iOS display name "Kimono Photos" | `mobile/ios/Runner/Info.plist` `CFBundleDisplayName` |
 | App links use `kimono-photos://` instead of `immich://`: declared, routed and built (home-screen widgets too) | Manifest, `Info.plist`, `lib/main.dart` `_deepLinkBuilder`, `ios/WidgetExtension/ImmichAPI.swift`, `android/.../widget/*.kt` |
 | OAuth returns to `app.kimono.photos:///oauth-callback` (Kimono registers this redirect URI) | `lib/services/oauth.service.dart`, manifest `CallbackActivity` filter |
+| iOS permission prompts are plain English and name Kimono Photos | `mobile/ios/Runner/Info.plist` `NS*UsageDescription` |
 | Immich's `my.immich.app` universal links are gone | Manifest, `Runner.entitlements`, `RunnerProfile.entitlements` |
 
 ## 2. No address, straight to Kimono — `0002-mobile-Connect-from-a-Kimono-link-and-go-straight-to.patch`
@@ -35,14 +36,21 @@ make a patch pass.
   server and, when OAuth is on, opens Kimono's sign-in immediately, showing a
   spinner meanwhile. With no address it says "Open Photos from Kimono on this
   phone to connect." On failure it offers "Try again".
-- The password form appears only when OAuth is off, or the OAuth attempt failed
-  or was cancelled. That is the way back in if Kimono sign-in is down.
+- Before opening the sign-in sheet by itself, it waits until the app is the
+  active foreground app (`KimonoConnect.untilForeground`). iOS rejects the
+  sheet otherwise (ASWebAuthenticationSession error 3), and a connect link
+  arrives while iOS is still dismissing its "Open in Kimono Photos?" prompt.
+- **Kimono is the only way in.** The sign-in screen has no email and password
+  form at all, even if the server allows passwords. If Kimono sign-in fails or
+  is cancelled, the screen offers "Sign in with Kimono" again. If the server has
+  OAuth off, it says "Kimono sign-in is off for Photos."
 - After a person taps **Sign out** (the account sheet,
   `app_bar_dialog.dart`, sets `KimonoConnect.signedOut`) the screen waits on
   the Kimono button instead of bouncing straight back in. Nothing else may set
   it: Immich signs out by itself at start-up when there's no saved session
   (`splash_screen.page.dart`), and the first open from the Portal must still go
   straight to Kimono.
+- "Open in browser" is never offered on a photo (`lib/utils/action_button.utils.dart`, `ActionButtonType.openInBrowser`), because it would show the server address in the browser.
 - Immich's hidden demo-server shortcuts on the logo are removed.
 
 ## 3. No Immich links — `0003-mobile-Drop-Immich-s-own-links-from-the-app.patch`

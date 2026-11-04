@@ -98,6 +98,10 @@ theme_ok() {
     grep -qF -- "$t" web/vite.config.ts || { echo "    vite.config.ts lacks hook: $t"; missing=1; }
   done
   grep -q 'data-k-avatar' web/src/lib/components/shared-components/UserAvatar.svelte || { echo "    UserAvatar lacks data-k-avatar"; missing=1; }
+  # The theme must never reach into the map (MapLibre owns its canvas and controls).
+  if grep -inE 'maplibre|mapbox|canvas' "$f" | grep -v '^\s*[0-9]*:\s*/\?\*' | grep -q .; then
+    echo "    kimono.css targets the map: $(grep -inE 'maplibre|mapbox|canvas' "$f" | head -3 | tr '\n' ' ')"; missing=1
+  fi
   return $missing
 }
 check "Kata theme wired in (kimono.css, @immich/ui hooks)" theme_ok
@@ -210,9 +214,24 @@ cat >"$WORK/config.json" <<'JSON'
   "passwordLogin": { "enabled": true },
   "machineLearning": { "enabled": false },
   "newVersionCheck": { "enabled": false },
-  "reverseGeocoding": { "enabled": false }
+  "reverseGeocoding": { "enabled": false },
+  "map": { "enabled": true, "lightStyle": "http://style/style.json", "darkStyle": "http://style/style.json" }
 }
 JSON
+# The map's style lives inside the compose network, so the map check needs no internet: one flat
+# background colour that the check then looks for on screen.
+MAP_GREEN='#2e8b57'
+mkdir -p "$WORK/style"
+cat >"$WORK/style/style.json" <<JSON
+{ "version": 8, "name": "kimono-check", "sources": {},
+  "layers": [{ "id": "ground", "type": "background", "paint": { "background-color": "$MAP_GREEN" } }] }
+JSON
+cat >"$WORK/style/default.conf" <<'NGINX'
+server {
+  listen 80;
+  location / { root /usr/share/nginx/html; add_header Access-Control-Allow-Origin * always; }
+}
+NGINX
 # The mock provider signs everyone in without a form, as one fixed person. Immich only accepts an
 # OAuth first user who is admin (role claim, default "immich_role"), so the person carries it.
 MOCK_CONFIG='{"interactiveLogin":false,"tokenCallbacks":[{"issuerId":"default","tokenExpiry":3600,"requestMappings":[{"requestParam":"grant_type","match":"*","claims":{"sub":"kimono-smoke","email":"smoke@kimono.test","name":"Smoke Test","immich_role":"admin","aud":["kimono-photos"]}}]}]}'
@@ -248,6 +267,11 @@ services:
     environment:
       JSON_CONFIG: '$MOCK_CONFIG'
     ports: ["127.0.0.1::8080"]
+  style:
+    image: nginx:1.27-alpine
+    volumes:
+      - $WORK/style/style.json:/usr/share/nginx/html/style.json:ro
+      - $WORK/style/default.conf:/etc/nginx/conf.d/default.conf:ro
 YAML
 
 compose up -d --quiet-pull >"$WORK/up.log" 2>&1 || { cat "$WORK/up.log"; bad "docker compose up"; end_stage; }
@@ -311,6 +335,107 @@ round_trip() {
 }
 check "full sign-in: redirect -> provider -> /auth/login?code -> /api/oauth/callback gives a session" round_trip
 check "signed-in visitor at /auth/login is not redirected" expect_page /auth/login -b "$JAR"
+# The map must actually draw (a blank map once shipped unnoticed): geotag photos, then open /map
+# and the photo info panel in headless Chromium inside the compose network, light and dark, and
+# require the style's colour on screen, the cluster marker, and nothing painted over the canvas.
+JPEG_B64='/9j/2wBDAA0JCgsKCA0LCgsODg0PEyAVExISEyccHhcgLikxMC4pLSwzOko+MzZGNywtQFdBRkxOUlNSMj5aYVpQYEpRUk//2wBDAQ4ODhMREyYVFSZPNS01T09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0//wAARCAAYACADASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAP/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFgEBAQEAAAAAAAAAAAAAAAAAAAIE/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AsA3KAAAAAAf/2Q=='
+geotag() {
+  local token ids=() id i
+  token="$(cat "$WORK/token")"
+  for i in 1 2 3; do
+    { printf '%s' "$JPEG_B64" | base64 -d; printf 'kimono-%s' "$i"; } >"$WORK/geo$i.jpg"   # distinct checksums
+    id="$(curl -sS -H "Authorization: Bearer $token" -F deviceAssetId=geo$i -F deviceId=check \
+      -F fileCreatedAt=2026-10-0${i}T10:00:00.000Z -F fileModifiedAt=2026-10-0${i}T10:00:00.000Z \
+      -F "assetData=@$WORK/geo$i.jpg;type=image/jpeg" "$APP/api/assets" |
+      node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).id||""))')"
+    [[ -n "$id" ]] || { echo "    upload $i failed"; return 1; }
+    ids+=("\"$id\"")
+  done
+  # Kyoto, set through the API (as a person would in the info panel) once metadata extraction is done.
+  local body; body="{\"ids\":[$(IFS=,; echo "${ids[*]}")],\"latitude\":35.0116,\"longitude\":135.7681}"
+  for _ in $(seq 1 30); do
+    curl -sS -o /dev/null -X PUT -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d "$body" "$APP/api/assets"
+    [[ "$(curl -sS -H "Authorization: Bearer $token" "$APP/api/map/markers" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).length))')" -ge 3 ]] &&
+      { echo "${ids[0]//\"/}" >"$WORK/geo-asset"; return 0; }
+    sleep 2
+  done
+  echo "    /api/map/markers never listed the geotagged photos"; return 1
+}
+check "seed: three photos geotagged in Kyoto" geotag
+cat >"$WORK/map-check.mjs" <<'JS'
+// Runs in mcr.microsoft.com/playwright on the compose network. argv: token assetId green
+import { chromium } from 'playwright';
+const [token, assetId, green] = process.argv.slice(2);
+const want = [1, 3, 5].map((i) => parseInt(green.slice(i, i + 2), 16));
+const base = 'http://server:2283';
+const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+let failed = 0;
+const say = (ok, msg) => { console.log(`${ok ? 'PASS' : 'FAIL'} ${msg}`); if (!ok) failed++; };
+// Share of the clip that is the style colour, measured from a real screenshot (what a person sees).
+const greenShare = async (page, box) => {
+  const png = await page.screenshot({ clip: box });
+  return page.evaluate(async ({ b64, want }) => {
+    const img = new Image(); img.src = `data:image/png;base64,${b64}`; await img.decode();
+    const c = Object.assign(document.createElement('canvas'), { width: img.width, height: img.height });
+    const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+    const d = g.getImageData(0, 0, c.width, c.height).data; let hit = 0;
+    for (let i = 0; i < d.length; i += 4) if (Math.abs(d[i] - want[0]) + Math.abs(d[i + 1] - want[1]) + Math.abs(d[i + 2] - want[2]) < 24) hit++;
+    return hit / (d.length / 4);
+  }, { b64: png.toString('base64'), want });
+};
+const covered = (page) => page.evaluate(() => {
+  const cv = document.querySelector('.maplibregl-canvas'); const r = cv.getBoundingClientRect(); const bad = [];
+  for (const [fx, fy] of [[0.25, 0.25], [0.75, 0.3], [0.5, 0.75], [0.3, 0.8]]) {
+    const el = document.elementFromPoint(r.x + r.width * fx, r.y + r.height * fy);
+    if (!el || !(el === cv || el.closest('.maplibregl-map'))) bad.push(el ? el.tagName + '.' + el.className : 'nothing');
+  }
+  return bad;
+});
+for (const scheme of ['light', 'dark']) {
+  for (const [label, width] of [['desktop', 1280], ['phone', 390]]) {
+    const ctx = await browser.newContext({ colorScheme: scheme, viewport: { width, height: 844 } });
+    await ctx.addCookies([{ name: 'immich_access_token', value: token, domain: 'server', path: '/' },
+      { name: 'immich_is_authenticated', value: 'true', domain: 'server', path: '/' }]);
+    const page = await ctx.newPage();
+    await page.goto(`${base}/map`);
+    const ready = await page.waitForSelector('.maplibregl-marker', { timeout: 45000 }).then(() => true, () => false);
+    say(ready, `${scheme} ${label} /map: cluster marker drawn`);
+    if (ready) {
+      await page.waitForTimeout(1500);
+      const box = await page.locator('.maplibregl-canvas').boundingBox();
+      const share = await greenShare(page, box);
+      say(share > 0.5, `${scheme} ${label} /map: style colour covers ${(share * 100).toFixed(0)}% of the map (need >50%)`);
+      const bad = await covered(page);
+      say(bad.length === 0, `${scheme} ${label} /map: nothing painted over the map${bad.length ? ' (' + bad.join(', ') + ')' : ''}`);
+    }
+    if (label === 'desktop') {
+      await page.goto(`${base}/photos/${assetId}`); await page.waitForTimeout(1500); await page.keyboard.press('i');
+      const mini = await page.waitForSelector('#detail-panel .maplibregl-canvas, .maplibregl-canvas', { timeout: 30000 }).then(() => true, () => false);
+      await page.waitForTimeout(3000);
+      if (mini) {
+        const box = await page.locator('.maplibregl-canvas').boundingBox();
+        const share = await greenShare(page, box);
+        say(share > 0.4, `${scheme} info-panel mini-map: style colour covers ${(share * 100).toFixed(0)}% (need >40%)`);
+      } else say(false, `${scheme} info-panel mini-map: no map canvas`);
+    }
+    await ctx.close();
+  }
+}
+await browser.close();
+process.exit(failed ? 1 : 0);
+JS
+map_renders() {
+  local out
+  out="$(docker run --rm --network "${PROJECT}_default" -v "$WORK/map-check.mjs:/check/map-check.mjs:ro" \
+    mcr.microsoft.com/playwright:v1.56.1-noble bash -c \
+    'cd /check && npm i --silent --no-save --no-audit --no-fund playwright@1.56.1 >/dev/null 2>&1 && node map-check.mjs "$@"' _ \
+    "$(cat "$WORK/token")" "$(cat "$WORK/geo-asset")" "$MAP_GREEN" 2>&1)"
+  local rc=$?
+  printf '%s\n' "$out" | sed 's/^/    /'
+  return $rc
+}
+check "map draws (light/dark, desktop/phone, /map and the info-panel mini-map)" map_renders
+
 signout() {
   local body
   # As the browser does: the session and auth-type cookies set by the callback.

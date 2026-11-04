@@ -81,7 +81,12 @@ jobs:
           flutter pub get --enforce-lockfile
           dart run easy_localization:generate -S ../i18n
           dart run bin/generate_keys.dart
-          flutter build ios --release --no-codesign --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
+          # Flutter prepares the project; xcodebuild builds it. Immich's Swift macro packages need
+          # -skipMacroValidation, and the build must not get -sdk (that builds the macro tools for
+          # iOS instead of the Mac, and they fail with "produced malformed response").
+          flutter build ios --release --no-codesign --config-only --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
+          xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner -configuration Release \
+            -destination 'generic/platform=iOS' -skipMacroValidation CODE_SIGNING_ALLOWED=NO build
 
   release-android:
     if: startsWith(github.ref, 'refs/tags/immich/v')
@@ -145,11 +150,11 @@ jobs:
           flutter pub get --enforce-lockfile
           dart run easy_localization:generate -S ../i18n
           dart run bin/generate_keys.dart
-          flutter build ios --release --no-codesign --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
+          flutter build ios --release --no-codesign --config-only --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
           KEY="$RUNNER_TEMP/asc.p8"; printf '%s' "$ASC_KEY" > "$KEY"
           AUTH=(-allowProvisioningUpdates -authenticationKeyPath "$KEY" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID")
           xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner -configuration Release \
-            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/Photos.xcarchive" archive "${AUTH[@]}" \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/Photos.xcarchive" archive "${AUTH[@]}" -skipMacroValidation \
             IMMICH_TEAM_ID="$APPLE_TEAM_ID" DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Automatic
           cat > "$RUNNER_TEMP/export.plist" <<PLIST
           <?xml version="1.0" encoding="UTF-8"?>

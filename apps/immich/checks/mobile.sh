@@ -41,10 +41,15 @@ absent "no my.immich.app links" grep -rn 'my\.immich\.app' "$M/android/app/src/m
 expect "connect links are routed" grep -q 'KimonoConnect.isConnectLink' "$M/lib/main.dart"
 expect "sign-in screen takes its address from KimonoConnect" grep -q 'KimonoConnect.server' "$M/lib/widgets/forms/login/login_form.dart"
 # (Networking settings still have address fields; the next-but-one check keeps that section unlisted.)
+absent "no email or password form on the sign-in screens" grep -rn 'ImmichPasswordInput\|ImmichTextInput\|emailController' "$M/lib/widgets/forms/login/login_form.dart" "$M/lib/pages/login"
 absent "no address field on the sign-in screens" grep -rln 'ImmichURLInput(\|login_form_endpoint_url' "$M/lib/widgets/forms/login" "$M/lib/pages/login"
+expect "\"Open in browser\" is never offered (it shows the address)" grep -q 'ActionButtonType.openInBrowser => false' "$M/lib/utils/action_button.utils.dart"
+absent "iOS permission prompts don't use Immich's wording" grep -nE 'We need|We require|beautiful video' "$M/ios/Runner/Info.plist"
 absent "the account sheet doesn't show the address" grep -rn 'server_info_box_server_url' "$M/lib" --include=*.dart --exclude=*.g.dart --exclude-dir=generated
 absent "Networking settings aren't listed" grep -n 'SettingSection\.values\.\(map\|where\|first\)' "$M/lib/pages/common/settings.page.dart"
 expect "sign-in starts Kimono's sign-in by itself" grep -q 'await oAuthLogin()' "$M/lib/widgets/forms/login/login_form.dart"
+# iOS rejects the sign-in sheet unless the app is in the foreground (ASWebAuthenticationSession error 3).
+expect "  ...only once the app is in the foreground" grep -q 'await KimonoConnect.untilForeground()' "$M/lib/widgets/forms/login/login_form.dart"
 expect "tapping Sign out stops the automatic sign-in" grep -q 'KimonoConnect.signedOut = true' "$M/lib/widgets/common/app_bar_dialog/app_bar_dialog.dart"
 # Immich also signs out by itself (start-up with no session): that must not stop the first automatic sign-in.
 absent "the app's own sign-outs don't stop it" grep -n 'KimonoConnect.signedOut = true' "$M/lib/services/auth.service.dart" "$M/lib/providers/auth.provider.dart" "$M/lib/pages/common/splash_screen.page.dart"

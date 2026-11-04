@@ -152,4 +152,11 @@ Photos must look like the same product as the Kimono Portal.
   Kimono header.
 - **Portraits.** People without a picture get their initial in plum Mincho on fold paper, never
   Immich's random colour disc.
+- **Hands off the map.** The theme never styles MapLibre (`.maplibregl-*`, its canvas, or its
+  controls), and nothing it adds may sit over the map.
+  - `/map` and the info-panel mini-map must draw, light and dark, desktop and phone.
+  - `checks/web.sh` checks this statically (`kimono.css` must not mention maplibre/mapbox/canvas)
+    and in the smoke test. There it geotags photos, serves a one-colour style inside the compose
+    network, and has headless Chromium require that colour on screen, the cluster marker, and an
+    uncovered canvas.
 
