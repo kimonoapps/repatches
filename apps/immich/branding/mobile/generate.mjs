@@ -54,10 +54,21 @@ const png = (path, input, { flatten } = {}) => {
   if (flatten) image = image.flatten({ background: flatten });
   return image.png().toFile(full);
 };
-/* A one-colour silhouette of the bloom, for monochrome and notification icons. */
+/* A one-colour version of the bloom, for Android's themed (monochrome) and notification icons,
+   which keep only alpha. Alpha follows the ink: dark strokes and the heart stay solid, the pale
+   wash fades, and the light glyph is cut out of the heart. A plain alpha mask would be a blob. */
 const silhouette = async (size, share, colour) => {
-  const alpha = await sharp(bloomAt(size, share)).ensureAlpha().extractChannel("alpha").toBuffer();
-  return sharp({ create: { width: size, height: size, channels: 3, background: colour } }).joinChannel(alpha).png().toBuffer();
+  const { data, info } = await sharp(bloomAt(size, share)).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const alpha = Buffer.alloc(info.width * info.height);
+  for (let i = 0; i < alpha.length; i++) {
+    const [r, g, b, a] = [data[i * 4], data[i * 4 + 1], data[i * 4 + 2], data[i * 4 + 3]];
+    const ink = 1 - (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+    /* ink 0.25 or less (wash, paper) → faint; 0.55 or more (strokes, heart) → solid */
+    const weight = Math.min(1, Math.max(0.18, (ink - 0.25) / 0.3 + 0.18));
+    alpha[i] = Math.round(a * weight);
+  }
+  const mask = await sharp(alpha, { raw: { width: info.width, height: info.height, channels: 1 } }).png().toBuffer();
+  return sharp({ create: { width: info.width, height: info.height, channels: 3, background: colour } }).joinChannel(mask).png().toBuffer();
 };
 const solid = (colour) => sharp({ create: { width: 1, height: 1, channels: 3, background: colour } }).png().toBuffer();
 
