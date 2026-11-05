@@ -9,7 +9,10 @@ has both, and every name a person sees says Kimono Photos.
 Must survive upstream changes:
 - Android applicationId app.kimono.photos (the Kotlin namespace stays
   app.alextran.immich so upstream's classes don't move); launcher label and
-  share/view intent labels say "Kimono Photos".
+  share/view intent labels say "Kimono Photos". The manifest keeps the
+  literal label, and upstream's app_name resValues in build.gradle (default
+  and PR builds) say Kimono Photos too, so nothing that reads @string/app_name
+  shows Immich.
 - iOS bundle ids and App Group come from ios/Signing.xcconfig:
   app.kimono.photos / app.kimono.photos.dev / group.app.kimono.photos, team
   left empty (CI passes DEVELOPMENT_TEAM). Display name "Kimono Photos".
@@ -22,10 +25,10 @@ Must survive upstream changes:
 - Immich's my.immich.app universal links are removed (domain we don't own).
 
 diff --git a/mobile/android/app/build.gradle b/mobile/android/app/build.gradle
-index 7e3d67f..be1b592 100644
+index 7b3217e..47a6940 100644
 --- a/mobile/android/app/build.gradle
 +++ b/mobile/android/app/build.gradle
-@@ -37,7 +37,7 @@ android {
+@@ -37,12 +37,12 @@ android {
    }
  
    defaultConfig {
@@ -34,6 +37,21 @@ index 7e3d67f..be1b592 100644
      minSdk = 26
      targetSdk = flutter.targetSdkVersion
      versionCode flutter.versionCode
+     versionName flutter.versionName
+-    resValue "string", "app_name", "Immich"
++    resValue "string", "app_name", "Kimono Photos"
+   }
+ 
+   signingConfigs {
+@@ -73,7 +73,7 @@ android {
+       if (prNumber) {
+         applicationIdSuffix ".pr${prNumber}"
+         versionNameSuffix "-pr${prNumber}"
+-        resValue "string", "app_name", "Immich PR ${prNumber}"
++        resValue "string", "app_name", "Kimono Photos PR ${prNumber}"
+       }
+     }
+   }
 diff --git a/mobile/android/app/src/debug/AndroidManifest.xml b/mobile/android/app/src/debug/AndroidManifest.xml
 index 4c0d925..a8deba0 100644
 --- a/mobile/android/app/src/debug/AndroidManifest.xml
@@ -48,14 +66,14 @@ index 4c0d925..a8deba0 100644
  </manifest>
 \ No newline at end of file
 diff --git a/mobile/android/app/src/main/AndroidManifest.xml b/mobile/android/app/src/main/AndroidManifest.xml
-index 1b8d2a9..1bbab8d 100644
+index a93c8af..226fa89 100644
 --- a/mobile/android/app/src/main/AndroidManifest.xml
 +++ b/mobile/android/app/src/main/AndroidManifest.xml
 @@ -25,7 +25,7 @@
    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
  
--  <application android:label="Immich" android:name=".ImmichApp" android:usesCleartextTraffic="true"
+-  <application android:label="@string/app_name" android:name=".ImmichApp" android:usesCleartextTraffic="true"
 +  <application android:label="Kimono Photos" android:name=".ImmichApp" android:usesCleartextTraffic="true"
      android:icon="@mipmap/ic_launcher" android:requestLegacyExternalStorage="true"
      android:largeHeap="true" android:enableOnBackInvokedCallback="false" android:allowBackup="false"
@@ -192,7 +210,7 @@ index 545a1ed..3db0b9a 100644
 +  return "kimono-photos://asset?id=${asset.id}"
  }
 diff --git a/mobile/ios/Runner/Info.plist b/mobile/ios/Runner/Info.plist
-index 31feda2..425979e 100644
+index 2ece233..2879b9c 100644
 --- a/mobile/ios/Runner/Info.plist
 +++ b/mobile/ios/Runner/Info.plist
 @@ -14,7 +14,7 @@
@@ -331,10 +349,10 @@ index 7e9dcd9..f06a911 100644
  }
  
 diff --git a/mobile/lib/main.dart b/mobile/lib/main.dart
-index f576a7c..a7ae76d 100644
+index 2118978..177bf9c 100644
 --- a/mobile/lib/main.dart
 +++ b/mobile/lib/main.dart
-@@ -182,10 +182,8 @@ class ImmichAppState extends ConsumerState<ImmichApp> with WidgetsBindingObserve
+@@ -195,10 +195,8 @@ class ImmichAppState extends ConsumerState<ImmichApp> with WidgetsBindingObserve
      final isColdStart = currentRouteName == null || currentRouteName == SplashScreenRoute.name;
  
      PageRouteInfo? route;
@@ -376,7 +394,7 @@ index d8b1604..a739a8c 100644
  
      return await _apiService.oAuthApi.finishOAuth(
 diff --git a/mobile/pubspec.yaml b/mobile/pubspec.yaml
-index 811f8fd..8778a84 100644
+index 23f55b5..461add2 100644
 --- a/mobile/pubspec.yaml
 +++ b/mobile/pubspec.yaml
 @@ -1,5 +1,5 @@
@@ -385,4 +403,4 @@ index 811f8fd..8778a84 100644
 +description: Kimono Photos
  
  publish_to: 'none'
- version: 3.1.0+3057
+ version: 3.3.6+3030699

@@ -14,18 +14,18 @@ Must survive upstream changes:
   don't appear.
 
 diff --git a/mobile/lib/pages/common/splash_screen.page.dart b/mobile/lib/pages/common/splash_screen.page.dart
-index 0d42387..c9a0ae7 100644
+index 385dcdc..1cddecd 100644
 --- a/mobile/lib/pages/common/splash_screen.page.dart
 +++ b/mobile/lib/pages/common/splash_screen.page.dart
-@@ -25,7 +25,6 @@ import 'package:immich_mobile/theme/theme_data.dart';
+@@ -27,7 +27,6 @@ import 'package:immich_mobile/theme/theme_data.dart';
  import 'package:immich_mobile/widgets/common/immich_logo.dart';
  import 'package:immich_mobile/widgets/common/immich_title_text.dart';
  import 'package:logging/logging.dart';
--import 'package:url_launcher/url_launcher.dart' show launchUrl, LaunchMode;
+-import 'package:url_launcher/url_launcher.dart' show LaunchMode, launchUrl;
  
  class BootstrapErrorWidget extends StatelessWidget {
    final String error;
-@@ -154,19 +153,6 @@ class _BottomPanelState extends State<_BottomPanel> {
+@@ -158,19 +157,6 @@ class _BottomPanelState extends State<_BottomPanel> {
          Row(
            mainAxisAlignment: MainAxisAlignment.center,
            children: [
@@ -46,7 +46,7 @@ index 0d42387..c9a0ae7 100644
                _ActionLink(
                  icon: Icons.delete_outline,
 diff --git a/mobile/lib/widgets/common/app_bar_dialog/app_bar_dialog.dart b/mobile/lib/widgets/common/app_bar_dialog/app_bar_dialog.dart
-index 57f563c..fb67731 100644
+index 9b14c63..8705032 100644
 --- a/mobile/lib/widgets/common/app_bar_dialog/app_bar_dialog.dart
 +++ b/mobile/lib/widgets/common/app_bar_dialog/app_bar_dialog.dart
 @@ -22,7 +22,6 @@ import 'package:immich_mobile/widgets/common/app_bar_dialog/app_bar_server_info.
@@ -57,24 +57,26 @@ index 57f563c..fb67731 100644
  
  class ImmichAppBarDialog extends HookConsumerWidget {
    const ImmichAppBarDialog({super.key});
-@@ -180,22 +179,6 @@ class ImmichAppBarDialog extends HookConsumerWidget {
+@@ -191,24 +190,6 @@ class ImmichAppBarDialog extends HookConsumerWidget {
          child: Row(
            mainAxisAlignment: MainAxisAlignment.center,
            children: [
 -            InkWell(
 -              onTap: () {
 -                ContextHelper(context).pop();
--                launchUrl(Uri.parse('https://docs.immich.app'), mode: LaunchMode.externalApplication);
+-                unawaited(launchUrl(Uri.parse('https://docs.immich.app'), mode: LaunchMode.externalApplication));
 -              },
--              child: Text("documentation", style: context.textTheme.bodySmall).tr(),
+-              child: Text(context.t.documentation, style: context.textTheme.bodySmall),
 -            ),
 -            const SizedBox(width: 20, child: Text("•", textAlign: TextAlign.center)),
 -            InkWell(
 -              onTap: () {
 -                ContextHelper(context).pop();
--                launchUrl(Uri.parse('https://github.com/immich-app/immich'), mode: LaunchMode.externalApplication);
+-                unawaited(
+-                  launchUrl(Uri.parse('https://github.com/immich-app/immich'), mode: LaunchMode.externalApplication),
+-                );
 -              },
--              child: Text("profile_drawer_github", style: context.textTheme.bodySmall).tr(),
+-              child: Text(context.t.profile_drawer_github, style: context.textTheme.bodySmall),
 -            ),
 -            const SizedBox(width: 20, child: Text("•", textAlign: TextAlign.center)),
              InkWell(

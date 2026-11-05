@@ -142,10 +142,10 @@ index 1b290fb..158a3a9 100644
    #image_dark: assets/splash-invert.png
    #branding_dark: assets/dart_dark.png
 diff --git a/mobile/lib/constants/colors.dart b/mobile/lib/constants/colors.dart
-index 655d2d9..4b1d98d 100644
+index 09783cc..24c31eb 100644
 --- a/mobile/lib/constants/colors.dart
 +++ b/mobile/lib/constants/colors.dart
-@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
+@@ -2,6 +2,6 @@ import 'package:flutter/material.dart';
  
  enum ImmichColorPreset { indigo, deepPurple, pink, red, orange, yellow, lime, green, cyan, slateGray }
  
@@ -154,5 +154,3 @@ index 655d2d9..4b1d98d 100644
 +const Color immichBrandColorLight = Color(0xFF482F74); // Kimono Photos, deep
 +const Color immichBrandColorDark = Color(0xFFE2DCF0); // Kimono Photos, pale
  const Color whiteOpacity75 = Color.fromRGBO(255, 255, 255, 0.75);
- const Color red400 = Color(0xFFEF5350);
- const Color grey200 = Color(0xFFEEEEEE);

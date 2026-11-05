@@ -14,7 +14,12 @@ if [[ "$ref" =~ ^$APP/v[0-9.]+-kimono\.([0-9]+)$ ]]; then rev="${BASH_REMATCH[1]
 name="${UPSTREAM_TAG#v}"
 pubspec="$(git -C "$UPSTREAM" show "$PIN:mobile/pubspec.yaml" 2>/dev/null || true)"
 upstream_build="$(sed -n 's/^version: *[0-9.]*+\([0-9]*\).*/\1/p' <<<"$pubspec")"
-flutter="$(git -C "$UPSTREAM" show "$PIN:mobile/mise.toml" 2>/dev/null | sed -n 's/^"aqua:flutter\/flutter" *= *"\(.*\)"/\1/p')"
+mise="$(git -C "$UPSTREAM" show "$PIN:mobile/mise.toml" 2>/dev/null || true)"
+# mise.toml pins Flutter inline ("aqua:flutter/flutter" = "x") or, since v3.3, in its own table.
+flutter="$(sed -n 's/^"aqua:flutter\/flutter" *= *"\(.*\)"/\1/p' <<<"$mise")"
+[[ -n "$flutter" ]] || flutter="$(awk '/^\[tools\."aqua:flutter\/flutter"\]/{t=1;next} /^\[/{t=0} t&&/^version *=/{gsub(/.*= *"|".*/,"");print;exit}' <<<"$mise")"
+[[ -n "$flutter" ]] || flutter="$(sed -n 's/^  flutter: *\([0-9.]*\) *$/\1/p' <<<"$pubspec" | head -1)"
+[[ -n "$flutter" ]] || { echo "versions.sh: can't find upstream's Flutter version" >&2; exit 1; }
 echo "UPSTREAM_TAG=$UPSTREAM_TAG"
 echo "KIMONO_REVISION=$rev"
 echo "VERSION=$name-kimono.$rev"

@@ -252,7 +252,7 @@ index bde00b3..97e9fc0 100644
 +  "theme_color": "#3b3357"
  }
 diff --git a/web/vite.config.ts b/web/vite.config.ts
-index c2b2b5b..1133d01 100644
+index 07e7efa..b196ca0 100644
 --- a/web/vite.config.ts
 +++ b/web/vite.config.ts
 @@ -3,9 +3,38 @@ import { sveltekit } from '@sveltejs/kit/vite';
