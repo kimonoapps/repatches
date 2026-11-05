@@ -25,7 +25,7 @@ const app = { id: definition.metadata.id, accent: definition.metadata.colors[0],
 
 /* Load packages/ui's bloom without a bundler: transpile the four files it needs. */
 const work = mkdtempSync(join(tmpdir(), "kimono-bloom-"));
-for (const name of ["bloom-svg.ts", "bloom-identity.ts", "accent.ts", "glyphs.tsx"]) {
+for (const name of ["bloom-svg.ts", "bloom-identity.ts", "ink-bloom.ts", "ink.ts", "accent.ts", "glyphs.tsx"]) {
   let source = readFileSync(join(kimono, "packages/ui/src", name), "utf8");
   source = source.replace(/^import .* from "react";?$/gm, "");
   const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText
