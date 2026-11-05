@@ -56,6 +56,7 @@ jobs:
               - apps/immich/branding/mobile/**
               - apps/immich/checks/mobile.sh
               - apps/immich/checks/mobile/**
+              - apps/immich/build/mobile-codegen.sh
               - apps/immich/intent/mobile.md
               # The phone reads the English strings the web patches own.
               - apps/immich/patches/web/*English*
@@ -145,9 +146,7 @@ jobs:
         working-directory: work/immich/mobile
         run: |
           sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
-          flutter pub get --enforce-lockfile
-          dart run easy_localization:generate -S ../i18n
-          dart run bin/generate_keys.dart
+          "$GITHUB_WORKSPACE/apps/immich/build/mobile-codegen.sh" "$GITHUB_WORKSPACE/work/immich"
           # Flutter prepares the project; xcodebuild builds it. Immich's Swift macro packages need
           # -skipMacroValidation, and the build must not get -sdk (that builds the macro tools for
           # iOS instead of the Mac, and they fail with "produced malformed response").
@@ -175,9 +174,7 @@ jobs:
         run: |
           printf '%s' "$KEYSTORE" | base64 -d > android/key.jks
           export ALIAS=kimono ANDROID_KEY_PASSWORD="$KEYSTORE_PASSWORD" ANDROID_STORE_PASSWORD="$KEYSTORE_PASSWORD"
-          flutter pub get --enforce-lockfile
-          dart run easy_localization:generate -S ../i18n
-          dart run bin/generate_keys.dart
+          "$GITHUB_WORKSPACE/apps/immich/build/mobile-codegen.sh" "$GITHUB_WORKSPACE/work/immich"
           flutter build apk --release --target-platform android-arm64 --split-per-abi \
             --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
           rm -f android/key.jks
@@ -223,9 +220,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
-          flutter pub get --enforce-lockfile
-          dart run easy_localization:generate -S ../i18n
-          dart run bin/generate_keys.dart
+          "$GITHUB_WORKSPACE/apps/immich/build/mobile-codegen.sh" "$GITHUB_WORKSPACE/work/immich"
           flutter build ios --release --no-codesign --config-only --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
           KEY="$RUNNER_TEMP/asc.p8"; printf '%s' "$ASC_KEY" > "$KEY"
           AUTH=(-allowProvisioningUpdates -authenticationKeyPath "$KEY" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID")

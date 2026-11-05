@@ -6,8 +6,9 @@
 #   test       checks/mobile/*_test.dart, run inside the checkout
 #   --apk      build a release APK and read its package id and label back out
 #
-# Needs Flutter (version from mobile/mise.toml) on PATH; --apk also needs the
-# Android SDK (ANDROID_HOME) and JDK 21.
+# Needs mise with upstream's tools (Flutter, Java, openapi-generator: mise.toml
+# and mobile/mise.toml), since analyze first runs upstream's codegen
+# (build/mobile-codegen.sh); --apk also needs the Android SDK (ANDROID_HOME).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../.." && pwd)"
@@ -69,9 +70,7 @@ if (( failures )); then echo "$failures static check(s) failed" >&2; exit 1; fi
 command -v flutter >/dev/null || { echo "flutter not on PATH; stopping after static checks" >&2; exit 1; }
 cd "$M"
 echo "== analyze"
-flutter pub get --enforce-lockfile >/dev/null
-dart run easy_localization:generate -S ../i18n >/dev/null
-dart run bin/generate_keys.dart >/dev/null
+"$ROOT/apps/immich/build/mobile-codegen.sh" "$CHECKOUT"
 dart analyze --fatal-infos lib
 
 echo "== test"
