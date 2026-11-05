@@ -253,7 +253,12 @@ services:
     volumes:
       - $WORK/config.json:/config/config.json:ro
     ports: ["127.0.0.1::2283"]
-    depends_on: [database, redis, oidc]
+    # The server exits if Postgres isn't accepting connections yet (a fresh database is still
+    # initialising), so start it only once the database and Redis report healthy.
+    depends_on:
+      database: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      oidc: { condition: service_started }
   database:
     image: ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0
     environment:
@@ -262,8 +267,15 @@ services:
       POSTGRES_DB: immich
       POSTGRES_INITDB_ARGS: --data-checksums
     shm_size: 128mb
+    # Over TCP: while the image initialises the database its temporary server takes only the socket.
+    healthcheck:
+      test: pg_isready -h 127.0.0.1 -U immich -d immich
+      interval: 2s
   redis:
     image: docker.io/valkey/valkey:9
+    healthcheck:
+      test: redis-cli ping | grep -q PONG || exit 1
+      interval: 2s
   oidc:
     image: ghcr.io/navikt/mock-oauth2-server:2.1.10
     environment:
