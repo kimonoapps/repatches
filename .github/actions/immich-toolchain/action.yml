@@ -2,7 +2,7 @@ name: Patched Immich checkout
 description: Apply the Immich patches into work/immich and set up the tools to build it.
 inputs:
   flutter:
-    description: Also install JDK 21 and the Flutter version upstream pins.
+    description: Also install upstream's mobile toolchain (Flutter, Java, codegen tools) with mise.
     default: "false"
 runs:
   using: composite
@@ -13,18 +13,28 @@ runs:
         scripts/check-pin.sh immich
         scripts/apply.sh immich
         scripts/versions.sh immich | tee -a "$GITHUB_ENV"
+    # Upstream's own tools, at upstream's versions, the way upstream's CI gets them (mise, from
+    # mise.toml + mobile/mise.toml): Flutter (with its postinstall patch for simulator builds),
+    # Java, node/pnpm and openapi-generator for the codegen (apps/immich/build/mobile-codegen.sh).
+    # Tools only the server, plugins or deployment need are skipped.
     - if: inputs.flutter == 'true'
-      uses: actions/setup-java@v4
+      shell: bash
+      run: |
+        echo "MISE_TRUSTED_CONFIG_PATHS=$GITHUB_WORKSPACE/work/immich" >> "$GITHUB_ENV"
+        echo "MISE_DISABLE_TOOLS=terragrunt,opentofu,github:extism/cli,github:webassembly/binaryen,github:extism/js-pdk,github:jellyfin/jellyfin-ffmpeg,github:CQLabs/homebrew-dcm" >> "$GITHUB_ENV"
+    - if: inputs.flutter == 'true'
+      uses: jdx/mise-action@dad1bfd3df957f44999b559dd69dc1671cb4e9ea # v4.2.1
       with:
-        distribution: temurin
-        java-version: "21"
+        version: 2026.7.12
+        working_directory: work/immich/mobile
+        install_args: "--locked"
     # Gradle's downloads and build cache, kept between runs.
     - if: inputs.flutter == 'true'
       uses: gradle/actions/setup-gradle@v4
+    # Dart packages, kept between runs.
     - if: inputs.flutter == 'true'
-      uses: subosito/flutter-action@v2
+      uses: actions/cache@v4
       with:
-        flutter-version: ${{ env.FLUTTER_VERSION }}
-        channel: stable
-        cache: true          # the Flutter SDK
-        pub-cache: true      # Dart packages
+        path: ~/.pub-cache
+        key: pub-${{ runner.os }}-${{ hashFiles('work/immich/mobile/pubspec.lock') }}
+        restore-keys: pub-${{ runner.os }}-

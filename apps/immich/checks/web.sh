@@ -185,8 +185,10 @@ compose() { docker compose -p "$PROJECT" -f "$WORK/compose.yaml" "$@"; }
 cleanup() {
   local rc=$?
   if ((rc != 0)) && [[ -f "$WORK/compose.yaml" ]]; then
-    echo "    --- server warnings/errors (last 15) ---"
-    compose logs --no-color server 2>/dev/null | grep -E 'WARN|ERROR' | tail -15 | sed 's/^/    /' || true
+    echo "    --- containers ---"
+    compose ps -a 2>/dev/null | sed 's/^/    /' || true
+    echo "    --- server log (last 80 lines) ---"
+    compose logs --no-color --tail 80 server 2>/dev/null | sed 's/^/    /' || true
   fi
   [[ -f "$WORK/compose.yaml" ]] && compose down -v --remove-orphans >/dev/null 2>&1 || true
   rm -rf "$WORK"
