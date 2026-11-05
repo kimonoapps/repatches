@@ -676,7 +676,7 @@ index 317192a..ae8f933 100644
  
 diff --git a/mobile/test/kimono/kimono_connect_test.dart b/mobile/test/kimono/kimono_connect_test.dart
 new file mode 100644
-index 0000000..eef1125
+index 0000000..80f5b20
 --- /dev/null
 +++ b/mobile/test/kimono/kimono_connect_test.dart
 @@ -0,0 +1,56 @@
@@ -685,17 +685,17 @@ index 0000000..eef1125
 +import 'package:drift/drift.dart' show DatabaseConnection;
 +import 'package:drift/native.dart';
 +import 'package:flutter_test/flutter_test.dart';
++import 'package:immich_mobile/data/db/main/database.dart';
 +import 'package:immich_mobile/domain/models/store.model.dart';
 +import 'package:immich_mobile/domain/services/store.service.dart';
 +import 'package:immich_mobile/entities/store.entity.dart';
-+import 'package:immich_mobile/infrastructure/repositories/db.repository.dart';
 +import 'package:immich_mobile/infrastructure/repositories/store.repository.dart';
 +import 'package:immich_mobile/kimono/kimono_connect.dart';
 +
 +void main() {
 +  setUpAll(() async {
 +    final db = Drift(DatabaseConnection(NativeDatabase.memory(), closeStreamsSynchronously: true));
-+    await StoreService.init(storeRepository: DriftStoreRepository(db), listenUpdates: false);
++    await StoreService.init(storeRepository: StoreRepository(db), listenUpdates: false);
 +  });
 +
 +  setUp(() async {
