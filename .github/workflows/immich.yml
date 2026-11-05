@@ -105,7 +105,8 @@ jobs:
 
   android:
     needs: changes
-    if: needs.changes.outputs.mobile == 'true'
+    # On a release tag the release jobs check and build instead: one build per platform, not two.
+    if: needs.changes.outputs.mobile == 'true' && !startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -125,7 +126,8 @@ jobs:
     # Proves the iPhone app compiles: a debug simulator build, much quicker than
     # Release. Only a release tag builds Release, signs it and uploads it.
     needs: changes
-    if: needs.changes.outputs.mobile == 'true'
+    # On a release tag the release jobs check and build instead: one build per platform, not two.
+    if: needs.changes.outputs.mobile == 'true' && !startsWith(github.ref, 'refs/tags/')
     runs-on: macos-latest
     timeout-minutes: 90
     steps:
@@ -156,7 +158,7 @@ jobs:
 
   release-android:
     if: startsWith(github.ref, 'refs/tags/immich/v')
-    needs: [web, android]
+    needs: [web]
     runs-on: ubuntu-latest
     environment: mobile-release   # holds the signing key; restrict it to immich/v* tags
     permissions:
@@ -172,9 +174,10 @@ jobs:
           KEYSTORE: ${{ secrets.KIMONO_ANDROID_KEYSTORE }}
           KEYSTORE_PASSWORD: ${{ secrets.KIMONO_ANDROID_KEYSTORE_PASSWORD }}
         run: |
+          # The android job is skipped on tags: the same checks run here (codegen, static, analyze, test).
+          "$GITHUB_WORKSPACE/apps/immich/checks/mobile.sh" "$GITHUB_WORKSPACE/work/immich"
           printf '%s' "$KEYSTORE" | base64 -d > android/key.jks
           export ALIAS=kimono ANDROID_KEY_PASSWORD="$KEYSTORE_PASSWORD" ANDROID_STORE_PASSWORD="$KEYSTORE_PASSWORD"
-          "$GITHUB_WORKSPACE/apps/immich/build/mobile-codegen.sh" "$GITHUB_WORKSPACE/work/immich"
           flutter build apk --release --target-platform android-arm64 --split-per-abi \
             --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
           rm -f android/key.jks
@@ -194,7 +197,7 @@ jobs:
 
   release-ios:
     if: startsWith(github.ref, 'refs/tags/immich/v')
-    needs: [web, android, ios]
+    needs: [web]
     runs-on: macos-latest
     environment: mobile-release
     steps:
