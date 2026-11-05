@@ -10,7 +10,6 @@ import 'package:immich_mobile/models/server_info/server_info.model.dart';
 import 'package:immich_mobile/providers/locale_provider.dart';
 import 'package:immich_mobile/providers/server_info.provider.dart';
 import 'package:immich_mobile/providers/user.provider.dart';
-import 'package:immich_mobile/utils/url_helper.dart';
 import 'package:immich_mobile/widgets/common/app_bar_dialog/server_update_notification.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -54,8 +53,6 @@ class AppBarServerInfo extends HookConsumerWidget {
             label: context.t.server_version,
             text: serverInfoState.serverVersion.major > 0 ? "${serverInfoState.serverVersion}" : "--",
           ),
-          divider,
-          _ServerInfoItem(label: context.t.server_info_box_server_url, text: getServerUrl() ?? '--', tooltip: true),
           if (serverInfoState.latestVersion != null) ...[
             divider,
             _ServerInfoItem(

@@ -7,7 +7,6 @@
   import FormatMessage from '$lib/elements/FormatMessage.svelte';
   import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
   import { systemConfigManager } from '$lib/managers/system-config-manager.svelte';
-  import { Link } from '@immich/ui';
   import { t } from 'svelte-i18n';
   import { fade } from 'svelte/transition';
 
@@ -55,7 +54,7 @@
             <p class="text-sm dark:text-immich-dark-fg">
               <FormatMessage key="admin.map_manage_reverse_geocoding_settings">
                 {#snippet children({ message })}
-                  <Link href="https://docs.immich.app/features/reverse-geocoding">{message}</Link>
+                  {message}
                 {/snippet}
               </FormatMessage>
             </p>

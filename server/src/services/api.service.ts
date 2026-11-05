@@ -2,11 +2,23 @@ import { Injectable, NotAcceptableException } from '@nestjs/common';
 import { NextFunction, Request, Response } from 'express';
 import { escape } from 'lodash-es';
 import { readFileSync } from 'node:fs';
+import { ImmichCookie } from 'src/enum.js';
 import { ConfigRepository } from 'src/repositories/config.repository.js';
 import { LoggingRepository } from 'src/repositories/logging.repository.js';
 import { AuthService } from 'src/services/auth.service.js';
 import { SharedLinkService } from 'src/services/shared-link.service.js';
 import { OpenGraphTags } from 'src/utils/misc.js';
+import { respondWithCookie } from 'src/utils/response.js';
+
+// Kimono: the pages a signed-out visitor may be sent to Kimono sign-in from, server-side, before any HTML.
+const AUTO_LAUNCH_PATHS = new Set(['/', '/auth/login']);
+// Upstream's own opt-outs (web/src/lib/utils.ts oauth.isAutoLaunchDisabled) plus OAuth callbacks.
+const isAutoLaunchOptOut = (query: Request['query']) =>
+  query.autoLaunch === '0' ||
+  query.password === '1' ||
+  query.password === 'true' ||
+  'code' in query ||
+  'error' in query;
 
 export const render = (index: string, meta: OpenGraphTags) => {
   const [title, description, imageUrl] = [meta.title, meta.description, meta.imageUrl].map((item) =>
@@ -36,6 +48,38 @@ export class ApiService {
     this.logger.setContext(ApiService.name);
   }
 
+  /** Kimono: 302 a signed-out visitor to the OAuth provider when auto-launch is on, so no login form ever renders. */
+  private async redirectToOAuth(request: Request, res: Response) {
+    if (!AUTO_LAUNCH_PATHS.has(request.path) || isAutoLaunchOptOut(request.query)) {
+      return false;
+    }
+
+    try {
+      if (await this.authService.isAuthenticatedRequest(request.headers, request.path)) {
+        return false;
+      }
+
+      const autoLaunch = await this.authService.getOAuthAutoLaunch(`${request.protocol}://${request.host}`);
+      if (!autoLaunch) {
+        return false;
+      }
+
+      respondWithCookie(res, null, {
+        isSecure: request.secure,
+        values: [
+          { key: ImmichCookie.OAuthState, value: autoLaunch.state },
+          { key: ImmichCookie.OAuthCodeVerifier, value: autoLaunch.codeVerifier ?? '' },
+        ],
+      });
+      res.header('Cache-Control', 'no-store').redirect(302, autoLaunch.url);
+      return true;
+    } catch (error) {
+      // Sign-in provider unreachable: fall back to the web app, which shows the error and any password form.
+      this.logger.warn(`OAuth auto-launch failed, serving the login page: ${error}`);
+      return false;
+    }
+  }
+
   ssr(excludePaths: string[]) {
     const { resourcePaths } = this.configRepository.getEnv();
 
@@ -61,6 +105,10 @@ export class ApiService {
         throw new NotAcceptableException(
           `The route ${request.path} was requested as ${request.header('accept')}, but only returns text/html`,
         );
+      }
+
+      if (await this.redirectToOAuth(request, res)) {
+        return;
       }
 
       let status = 200;

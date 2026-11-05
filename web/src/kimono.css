@@ -1,0 +1,549 @@
+/*
+ * Kimono Photos: Kimono's 型 Kata look for the Immich web app, applied at the root.
+ *
+ * Paper grounds, ink text, plum display type, flat surfaces with hairlines, and seals
+ * (carved hanko blocks) instead of pill buttons. Light paper is the default; dark is a
+ * plum-black urushi room, never Immich's grey. Photos' own colour (#8d7fb5 / deep
+ * #482f74 / pale #e2dcf0) is the primary: the bloom, primary seals, focus and the
+ * selected marker.
+ *
+ * Everything here is UNLAYERED on purpose: Tailwind's @theme variables and utilities
+ * live in cascade layers, so a plain :root custom property or rule here wins over them
+ * without touching components. Hooks used:
+ *  - Tailwind theme variables (--color-neutral/gray/..., --color-white/black, --radius-*,
+ *    --font-sans), read at runtime by every utility class.
+ *  - @immich/ui's theme variables (--immich-ui-*) and Immich's legacy --immich-* triplets.
+ *  - data attributes added to @immich/ui's Button, Heading and NavbarItem by the
+ *    kimonoBrand Vite plugin (web/vite.config.ts): [data-k="seal"|"icon"],
+ *    [data-k-variant], [data-k-color], [data-k-heading], [data-k-nav].
+ * Fonts are copied to /fonts/kimono/ by repatches' branding/web/install.sh.
+ * Source of truth: kimono/docs/design-system.md and packages/ui/src/styles/tokens.css.
+ */
+
+@font-face {
+  font-family: 'Zen Maru Gothic Kimono';
+  src: url('/fonts/kimono/zen-maru-gothic-latin-400-normal.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Zen Maru Gothic Kimono';
+  src: url('/fonts/kimono/zen-maru-gothic-latin-500-normal.woff2') format('woff2');
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Zen Maru Gothic Kimono';
+  src: url('/fonts/kimono/zen-maru-gothic-latin-700-normal.woff2') format('woff2');
+  font-weight: 600 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Shippori Mincho Kimono';
+  src: url('/fonts/kimono/shippori-mincho-600-latin.woff2') format('woff2');
+  font-weight: 500 700;
+  font-display: swap;
+}
+
+/* ── Kata tokens (light: paper) ─────────────────────────────────────────── */
+:root,
+.light {
+  --k-ink: #24221f;
+  --k-ink-soft: #5b524d;
+  --k-faint: #6b605a;
+  --k-plum: #4e2b37;
+  --k-lift: #fffdf8;
+  --k-sheet: #fbf7ef;
+  --k-ground: #f7f1e8;
+  --k-fold: #ebe2d3;
+  --k-hair: #ddd0bf;
+  --k-hair-deep: #cdbda7;
+  --k-hover: #f7efe1;
+  --k-accent: #482f74;
+  --k-accent-deep: #33204f;
+  --k-accent-pale: #e2dcf0;
+  --k-app-accent: #8d7fb5;
+  --k-danger: #a84d63;
+  --k-danger-deep: #7e3448;
+  --k-danger-wash: #faeef0;
+  --k-display: 'Shippori Mincho Kimono', 'Hiragino Mincho ProN', 'Yu Mincho', serif;
+  --k-sans: 'Zen Maru Gothic Kimono', 'Hiragino Maru Gothic ProN', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', sans-serif;
+
+  /* Tailwind: type, corners, depth. Shared surfaces 2px, inputs and small controls 1px. */
+  --font-sans: var(--k-sans);
+  --radius-xs: 1px;
+  --radius-sm: 1px;
+  --radius-md: 1px;
+  --radius-lg: 1px;
+  --radius-xl: 2px;
+  --radius-2xl: 2px;
+  --radius-3xl: 2px;
+  --radius-4xl: 2px;
+
+  /* Tailwind's greys become a warm paper-to-urushi ramp, so every bg-gray-*, border-gray-*,
+     neutral-* in Immich (and @immich/ui's light/dark scales, built on neutral) is paper or ink. */
+  --kp-50: #fffdf8;
+  --kp-100: #f4ede2;
+  --kp-200: #ebe2d3;
+  --kp-300: #ddd0bf;
+  --kp-400: #c4b39d;
+  --kp-500: #948479;
+  --kp-600: #6b605a;
+  --kp-700: #5b524d;
+  --kp-800: #3a2b31;
+  --kp-900: #2a1d22;
+  --kp-950: #1d1417;
+  --color-neutral-50: var(--kp-50);
+  --color-neutral-100: var(--kp-100);
+  --color-neutral-200: var(--kp-200);
+  --color-neutral-300: var(--kp-300);
+  --color-neutral-400: var(--kp-400);
+  --color-neutral-500: var(--kp-500);
+  --color-neutral-600: var(--kp-600);
+  --color-neutral-700: var(--kp-700);
+  --color-neutral-800: var(--kp-800);
+  --color-neutral-900: var(--kp-900);
+  --color-neutral-950: var(--kp-950);
+  --color-gray-50: var(--kp-50);
+  --color-gray-100: var(--kp-100);
+  --color-gray-200: var(--kp-200);
+  --color-gray-300: var(--kp-300);
+  --color-gray-400: var(--kp-400);
+  --color-gray-500: var(--kp-500);
+  --color-gray-600: var(--kp-600);
+  --color-gray-700: var(--kp-700);
+  --color-gray-800: var(--kp-800);
+  --color-gray-900: var(--kp-900);
+  --color-gray-950: var(--kp-950);
+  --color-zinc-50: var(--kp-50);
+  --color-zinc-100: var(--kp-100);
+  --color-zinc-200: var(--kp-200);
+  --color-zinc-300: var(--kp-300);
+  --color-zinc-400: var(--kp-400);
+  --color-zinc-500: var(--kp-500);
+  --color-zinc-600: var(--kp-600);
+  --color-zinc-700: var(--kp-700);
+  --color-zinc-800: var(--kp-800);
+  --color-zinc-900: var(--kp-900);
+  --color-zinc-950: var(--kp-950);
+  --color-slate-50: var(--kp-50);
+  --color-slate-100: var(--kp-100);
+  --color-slate-200: var(--kp-200);
+  --color-slate-300: var(--kp-300);
+  --color-slate-400: var(--kp-400);
+  --color-slate-500: var(--kp-500);
+  --color-slate-600: var(--kp-600);
+  --color-slate-700: var(--kp-700);
+  --color-slate-800: var(--kp-800);
+  --color-slate-900: var(--kp-900);
+  --color-slate-950: var(--kp-950);
+  --color-stone-50: var(--kp-50);
+  --color-stone-100: var(--kp-100);
+  --color-stone-200: var(--kp-200);
+  --color-stone-300: var(--kp-300);
+  --color-stone-400: var(--kp-400);
+  --color-stone-500: var(--kp-500);
+  --color-stone-600: var(--kp-600);
+  --color-stone-700: var(--kp-700);
+  --color-stone-800: var(--kp-800);
+  --color-stone-900: var(--kp-900);
+  --color-stone-950: var(--kp-950);
+  --color-white: #fffdf8;
+  --color-black: #1d1417;
+
+  /* @immich/ui semantic ramps: Photos' deep accent, suō for danger, moss for success,
+     wood for warning, plum for info. No blues, no greens beyond moss. */
+  --immich-ui-primary-50: color-mix(in oklch, #482f74 8%, #fffdf8);
+  --immich-ui-primary-100: color-mix(in oklch, #482f74 18%, #fffdf8);
+  --immich-ui-primary-200: color-mix(in oklch, #482f74 34%, #fffdf8);
+  --immich-ui-primary-300: color-mix(in oklch, #482f74 52%, #fffdf8);
+  --immich-ui-primary-400: color-mix(in oklch, #482f74 74%, #fffdf8);
+  --immich-ui-primary-500: #482f74;
+  --immich-ui-primary-600: color-mix(in oklch, #482f74 80%, #1d1417);
+  --immich-ui-primary-700: color-mix(in oklch, #482f74 62%, #1d1417);
+  --immich-ui-primary-800: color-mix(in oklch, #482f74 46%, #1d1417);
+  --immich-ui-primary-900: color-mix(in oklch, #482f74 32%, #1d1417);
+  --immich-ui-primary-950: color-mix(in oklch, #482f74 22%, #1d1417);
+  --immich-ui-danger-50: color-mix(in oklch, #a84d63 8%, #fffdf8);
+  --immich-ui-danger-100: color-mix(in oklch, #a84d63 18%, #fffdf8);
+  --immich-ui-danger-200: color-mix(in oklch, #a84d63 34%, #fffdf8);
+  --immich-ui-danger-300: color-mix(in oklch, #a84d63 52%, #fffdf8);
+  --immich-ui-danger-400: color-mix(in oklch, #a84d63 74%, #fffdf8);
+  --immich-ui-danger-500: #a84d63;
+  --immich-ui-danger-600: color-mix(in oklch, #a84d63 80%, #1d1417);
+  --immich-ui-danger-700: color-mix(in oklch, #a84d63 62%, #1d1417);
+  --immich-ui-danger-800: color-mix(in oklch, #a84d63 46%, #1d1417);
+  --immich-ui-danger-900: color-mix(in oklch, #a84d63 32%, #1d1417);
+  --immich-ui-danger-950: color-mix(in oklch, #a84d63 22%, #1d1417);
+  --immich-ui-success-50: color-mix(in oklch, #5c7150 8%, #fffdf8);
+  --immich-ui-success-100: color-mix(in oklch, #5c7150 18%, #fffdf8);
+  --immich-ui-success-200: color-mix(in oklch, #5c7150 34%, #fffdf8);
+  --immich-ui-success-300: color-mix(in oklch, #5c7150 52%, #fffdf8);
+  --immich-ui-success-400: color-mix(in oklch, #5c7150 74%, #fffdf8);
+  --immich-ui-success-500: #5c7150;
+  --immich-ui-success-600: color-mix(in oklch, #5c7150 80%, #1d1417);
+  --immich-ui-success-700: color-mix(in oklch, #5c7150 62%, #1d1417);
+  --immich-ui-success-800: color-mix(in oklch, #5c7150 46%, #1d1417);
+  --immich-ui-success-900: color-mix(in oklch, #5c7150 32%, #1d1417);
+  --immich-ui-success-950: color-mix(in oklch, #5c7150 22%, #1d1417);
+  --immich-ui-warning-50: color-mix(in oklch, #9c7544 8%, #fffdf8);
+  --immich-ui-warning-100: color-mix(in oklch, #9c7544 18%, #fffdf8);
+  --immich-ui-warning-200: color-mix(in oklch, #9c7544 34%, #fffdf8);
+  --immich-ui-warning-300: color-mix(in oklch, #9c7544 52%, #fffdf8);
+  --immich-ui-warning-400: color-mix(in oklch, #9c7544 74%, #fffdf8);
+  --immich-ui-warning-500: #9c7544;
+  --immich-ui-warning-600: color-mix(in oklch, #9c7544 80%, #1d1417);
+  --immich-ui-warning-700: color-mix(in oklch, #9c7544 62%, #1d1417);
+  --immich-ui-warning-800: color-mix(in oklch, #9c7544 46%, #1d1417);
+  --immich-ui-warning-900: color-mix(in oklch, #9c7544 32%, #1d1417);
+  --immich-ui-warning-950: color-mix(in oklch, #9c7544 22%, #1d1417);
+  --immich-ui-info-50: color-mix(in oklch, #4e2b37 8%, #fffdf8);
+  --immich-ui-info-100: color-mix(in oklch, #4e2b37 18%, #fffdf8);
+  --immich-ui-info-200: color-mix(in oklch, #4e2b37 34%, #fffdf8);
+  --immich-ui-info-300: color-mix(in oklch, #4e2b37 52%, #fffdf8);
+  --immich-ui-info-400: color-mix(in oklch, #4e2b37 74%, #fffdf8);
+  --immich-ui-info-500: #4e2b37;
+  --immich-ui-info-600: color-mix(in oklch, #4e2b37 80%, #1d1417);
+  --immich-ui-info-700: color-mix(in oklch, #4e2b37 62%, #1d1417);
+  --immich-ui-info-800: color-mix(in oklch, #4e2b37 46%, #1d1417);
+  --immich-ui-info-900: color-mix(in oklch, #4e2b37 32%, #1d1417);
+  --immich-ui-info-950: color-mix(in oklch, #4e2b37 22%, #1d1417);
+  --immich-ui-primary-100: #e2dcf0;
+  --immich-ui-primary-400: #8d7fb5;
+
+  --immich-ui-light: #fbf7ef;
+  --immich-ui-dark: #24221f;
+  --immich-ui-muted: #6b605a;
+  --immich-ui-gray: #f4ede2;
+  --immich-ui-default-border: #ddd0bf;
+
+  /* Immich's legacy RGB triplets */
+  --immich-primary: 72 47 116;
+  --immich-bg: 251 247 239;
+  --immich-fg: 36 34 31;
+  --immich-gray: 244 237 226;
+  --immich-dark-primary: 198 188 224;
+  --immich-dark-bg: 29 20 23;
+  --immich-dark-fg: 243 233 224;
+  --immich-dark-gray: 42 29 34;
+
+  font-synthesis: none;
+}
+
+/* ── dark: urushi, plum-black lacquer with paper-toned type ─────────────── */
+.dark {
+  --k-ink: #f3e9e0;
+  --k-ink-soft: #cdbfb4;
+  --k-faint: #a8969c;
+  --k-plum: #f2cbd2;
+  --k-lift: #2a1d22;
+  --k-sheet: #241a1e;
+  --k-ground: #1d1417;
+  --k-fold: #34252b;
+  --k-hair: #45333a;
+  --k-hair-deep: #5a4249;
+  --k-hover: #2f2227;
+  --k-accent: #c6bce0;
+  --k-accent-deep: #e2dcf0;
+  --k-accent-pale: #3b3357;
+  --k-danger: #d77b8c;
+  --k-danger-deep: #f2cbd2;
+  --k-danger-wash: #3a1f27;
+
+  --immich-ui-primary-50: color-mix(in oklch, #c6bce0 8%, #1d1417);
+  --immich-ui-primary-100: color-mix(in oklch, #c6bce0 18%, #1d1417);
+  --immich-ui-primary-200: color-mix(in oklch, #c6bce0 34%, #1d1417);
+  --immich-ui-primary-300: color-mix(in oklch, #c6bce0 52%, #1d1417);
+  --immich-ui-primary-400: color-mix(in oklch, #c6bce0 74%, #1d1417);
+  --immich-ui-primary-500: #c6bce0;
+  --immich-ui-primary-600: color-mix(in oklch, #c6bce0 80%, #fffdf8);
+  --immich-ui-primary-700: color-mix(in oklch, #c6bce0 62%, #fffdf8);
+  --immich-ui-primary-800: color-mix(in oklch, #c6bce0 46%, #fffdf8);
+  --immich-ui-primary-900: color-mix(in oklch, #c6bce0 32%, #fffdf8);
+  --immich-ui-primary-950: color-mix(in oklch, #c6bce0 22%, #fffdf8);
+  --immich-ui-danger-50: color-mix(in oklch, #d77b8c 8%, #1d1417);
+  --immich-ui-danger-100: color-mix(in oklch, #d77b8c 18%, #1d1417);
+  --immich-ui-danger-200: color-mix(in oklch, #d77b8c 34%, #1d1417);
+  --immich-ui-danger-300: color-mix(in oklch, #d77b8c 52%, #1d1417);
+  --immich-ui-danger-400: color-mix(in oklch, #d77b8c 74%, #1d1417);
+  --immich-ui-danger-500: #d77b8c;
+  --immich-ui-danger-600: color-mix(in oklch, #d77b8c 80%, #fffdf8);
+  --immich-ui-danger-700: color-mix(in oklch, #d77b8c 62%, #fffdf8);
+  --immich-ui-danger-800: color-mix(in oklch, #d77b8c 46%, #fffdf8);
+  --immich-ui-danger-900: color-mix(in oklch, #d77b8c 32%, #fffdf8);
+  --immich-ui-danger-950: color-mix(in oklch, #d77b8c 22%, #fffdf8);
+  --immich-ui-success-50: color-mix(in oklch, #9db08f 8%, #1d1417);
+  --immich-ui-success-100: color-mix(in oklch, #9db08f 18%, #1d1417);
+  --immich-ui-success-200: color-mix(in oklch, #9db08f 34%, #1d1417);
+  --immich-ui-success-300: color-mix(in oklch, #9db08f 52%, #1d1417);
+  --immich-ui-success-400: color-mix(in oklch, #9db08f 74%, #1d1417);
+  --immich-ui-success-500: #9db08f;
+  --immich-ui-success-600: color-mix(in oklch, #9db08f 80%, #fffdf8);
+  --immich-ui-success-700: color-mix(in oklch, #9db08f 62%, #fffdf8);
+  --immich-ui-success-800: color-mix(in oklch, #9db08f 46%, #fffdf8);
+  --immich-ui-success-900: color-mix(in oklch, #9db08f 32%, #fffdf8);
+  --immich-ui-success-950: color-mix(in oklch, #9db08f 22%, #fffdf8);
+  --immich-ui-warning-50: color-mix(in oklch, #dcc090 8%, #1d1417);
+  --immich-ui-warning-100: color-mix(in oklch, #dcc090 18%, #1d1417);
+  --immich-ui-warning-200: color-mix(in oklch, #dcc090 34%, #1d1417);
+  --immich-ui-warning-300: color-mix(in oklch, #dcc090 52%, #1d1417);
+  --immich-ui-warning-400: color-mix(in oklch, #dcc090 74%, #1d1417);
+  --immich-ui-warning-500: #dcc090;
+  --immich-ui-warning-600: color-mix(in oklch, #dcc090 80%, #fffdf8);
+  --immich-ui-warning-700: color-mix(in oklch, #dcc090 62%, #fffdf8);
+  --immich-ui-warning-800: color-mix(in oklch, #dcc090 46%, #fffdf8);
+  --immich-ui-warning-900: color-mix(in oklch, #dcc090 32%, #fffdf8);
+  --immich-ui-warning-950: color-mix(in oklch, #dcc090 22%, #fffdf8);
+  --immich-ui-info-50: color-mix(in oklch, #d59aa4 8%, #1d1417);
+  --immich-ui-info-100: color-mix(in oklch, #d59aa4 18%, #1d1417);
+  --immich-ui-info-200: color-mix(in oklch, #d59aa4 34%, #1d1417);
+  --immich-ui-info-300: color-mix(in oklch, #d59aa4 52%, #1d1417);
+  --immich-ui-info-400: color-mix(in oklch, #d59aa4 74%, #1d1417);
+  --immich-ui-info-500: #d59aa4;
+  --immich-ui-info-600: color-mix(in oklch, #d59aa4 80%, #fffdf8);
+  --immich-ui-info-700: color-mix(in oklch, #d59aa4 62%, #fffdf8);
+  --immich-ui-info-800: color-mix(in oklch, #d59aa4 46%, #fffdf8);
+  --immich-ui-info-900: color-mix(in oklch, #d59aa4 32%, #fffdf8);
+  --immich-ui-info-950: color-mix(in oklch, #d59aa4 22%, #fffdf8);
+  --immich-ui-primary-400: #8d7fb5;
+  --immich-ui-primary-200: #3b3357;
+
+  --immich-ui-light: #1d1417;
+  --immich-ui-dark: #f3e9e0;
+  --immich-ui-muted: #a8969c;
+  --immich-ui-gray: #2a1d22;
+  --immich-ui-default-border: #45333a;
+}
+
+html.light,
+html.light body {
+  background-color: var(--k-sheet);
+}
+html.dark,
+html.dark body {
+  background-color: var(--k-ground);
+}
+body {
+  color: var(--k-ink);
+  font-family: var(--k-sans);
+  -webkit-font-smoothing: antialiased;
+}
+::selection {
+  background: var(--k-accent-pale);
+}
+:focus-visible {
+  outline-color: var(--k-accent);
+}
+
+/* ── type: Mincho names things ──────────────────────────────────────────── */
+[data-k-heading],
+#dashboard-navbar ~ * h1,
+main h1,
+main h2 {
+  font-family: var(--k-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* page titles and album names are named things too */
+#user-page-header {
+  font-family: var(--k-display);
+  font-size: 21px;
+  font-weight: 600;
+  color: var(--k-plum);
+}
+.text-2xl.lg\:text-6xl {
+  font-family: var(--k-display);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+/* 肖 a person without a picture: their initial in plum Mincho on fold paper */
+[data-k-avatar] {
+  background: var(--k-fold);
+  color: var(--k-plum);
+  box-shadow: inset 0 0 0 1px var(--k-hair);
+  font-family: var(--k-display);
+}
+
+/* control bars (album, asset and selection toolbars): a flat plank, not a capsule */
+.h-control-bar {
+  border-radius: 2px;
+}
+
+/* ── paper stacks; it does not glow: no blurred shadows, no backdrop blur ── */
+.shadow-sm,
+.shadow,
+.shadow-md,
+.shadow-lg,
+.shadow-xl,
+.shadow-2xl {
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--k-plum) 8%, transparent) !important;
+}
+.backdrop-blur,
+.backdrop-blur-sm,
+.backdrop-blur-md,
+.backdrop-blur-lg,
+.backdrop-blur-xl,
+[class*='backdrop-blur-['] {
+  backdrop-filter: none !important;
+}
+
+/* 紐 the cord under the header: 2px plum over 1px sakura, as in every Kimono header */
+#dashboard-navbar {
+  position: relative;
+  background: var(--k-ground);
+}
+#dashboard-navbar::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 2px;
+  background: #4e2b37;
+  box-shadow: 0 1px 0 #d59aa4;
+  pointer-events: none;
+}
+#dashboard-navbar > div {
+  border-bottom: 0;
+}
+.dark #dashboard-navbar::after {
+  background: #f2cbd2;
+  box-shadow: 0 1px 0 #6b3445;
+}
+
+/* ── sidebar: no pills; the chosen room gets a 3px marker in Photos' colour ── */
+[data-k-nav],
+.rounded-e-full {
+  border-start-end-radius: 2px;
+  border-end-end-radius: 2px;
+}
+[data-k-nav='active'] {
+  background: var(--k-hover);
+  color: var(--k-accent);
+  box-shadow: inset 3px 0 0 var(--k-app-accent);
+}
+.dark [data-k-nav='active'] {
+  background: var(--k-fold);
+}
+
+/* ── 判 seals: a carved block, not a pill ───────────────────────────────── */
+[data-k='seal'] {
+  --k-seal-face: var(--k-accent);
+  --k-seal-ink: var(--k-lift);
+  --k-seal-base: color-mix(in srgb, var(--k-seal-face) 72%, #24221f);
+  position: relative;
+  border-radius: 2px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  transition:
+    background-color 180ms cubic-bezier(0.2, 0.9, 0.25, 1),
+    color 180ms cubic-bezier(0.2, 0.9, 0.25, 1),
+    transform 120ms cubic-bezier(0.2, 0.9, 0.25, 1),
+    box-shadow 400ms cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+/* inked: primary and every other filled colour except the quiet secondary */
+[data-k='seal'][data-k-variant='filled'] {
+  background: var(--k-seal-face);
+  color: var(--k-seal-ink);
+  box-shadow: inset 0 -2px 0 var(--k-seal-base);
+}
+[data-k='seal'][data-k-variant='filled']::before {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border: 1px solid color-mix(in srgb, var(--k-seal-ink) 32%, transparent);
+  border-radius: 1px;
+  pointer-events: none;
+  transition: inset 120ms cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+[data-k='seal'][data-k-variant='filled']:not(:disabled):hover {
+  background: color-mix(in srgb, var(--k-seal-face) 82%, #24221f);
+}
+.dark [data-k='seal'][data-k-variant='filled']:not(:disabled):hover {
+  background: color-mix(in srgb, var(--k-seal-face) 82%, #fffdf8);
+}
+[data-k='seal'][data-k-variant='filled']:not(:disabled):active {
+  transform: translateY(1px);
+  box-shadow: inset 0 0 0 var(--k-seal-base);
+}
+[data-k='seal'][data-k-variant='filled']:not(:disabled):active::before {
+  inset: 4px;
+}
+[data-k='seal'][data-k-color='success'] {
+  --k-seal-face: var(--immich-ui-success-500);
+}
+[data-k='seal'][data-k-color='warning'] {
+  --k-seal-face: var(--immich-ui-warning-500);
+}
+[data-k='seal'][data-k-color='info'] {
+  --k-seal-face: var(--immich-ui-info-500);
+}
+/* quiet: the same block uninked — fold paper on a hair base, no ring */
+[data-k='seal'][data-k-variant='filled'][data-k-color='secondary'],
+[data-k='seal'][data-k-variant='outline'] {
+  --k-seal-base: var(--k-hair-deep);
+  background: var(--k-fold);
+  color: var(--k-ink);
+  border-color: transparent;
+  box-shadow: inset 0 -2px 0 var(--k-seal-base);
+}
+[data-k='seal'][data-k-variant='filled'][data-k-color='secondary']::before,
+[data-k='seal'][data-k-variant='outline']::before {
+  display: none;
+}
+[data-k='seal'][data-k-variant='filled'][data-k-color='secondary']:not(:disabled):hover,
+[data-k='seal'][data-k-variant='outline']:not(:disabled):hover {
+  background: color-mix(in srgb, var(--k-fold) 60%, var(--k-hair));
+  color: var(--k-plum);
+}
+/* danger: the consequence on a rose wash, inked only when you reach for it */
+[data-k='seal'][data-k-color='danger'] {
+  --k-seal-base: color-mix(in srgb, var(--k-danger) 28%, var(--k-danger-wash));
+  background: var(--k-danger-wash);
+  color: var(--k-danger-deep);
+  box-shadow: inset 0 -2px 0 var(--k-seal-base);
+}
+[data-k='seal'][data-k-color='danger']::before {
+  opacity: 0;
+}
+[data-k='seal'][data-k-color='danger']:not(:disabled):hover {
+  --k-seal-base: #5f2535;
+  background: var(--k-danger-deep);
+  color: var(--k-lift);
+}
+[data-k='seal'][data-k-color='danger']:not(:disabled):hover::before {
+  opacity: 1;
+}
+/* ghost: a word that acts; it marks itself only on reach */
+[data-k='seal'][data-k-variant='ghost'] {
+  letter-spacing: 0.02em;
+}
+/* ...unless Immich gave it a surface of its own: then it is a quiet seal */
+[data-k='seal'][data-k-variant='ghost'][class*='bg-white'],
+.dark [data-k='seal'][data-k-variant='ghost'][class*='dark:bg-'] {
+  background: var(--k-fold);
+  color: var(--k-ink);
+  border-color: transparent;
+  box-shadow: inset 0 -2px 0 var(--k-hair-deep);
+}
+/* lifted off its base */
+[data-k='seal']:disabled,
+[data-k='seal'][aria-disabled='true'] {
+  box-shadow: none;
+  transform: none;
+}
+[data-k='seal']:disabled::before,
+[data-k='seal'][aria-disabled='true']::before {
+  display: none;
+}
+/* icon-only controls: square-cut, not circles */
+[data-k='icon'] {
+  border-radius: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-k='seal'],
+  [data-k='seal']::before {
+    transition: none;
+  }
+}

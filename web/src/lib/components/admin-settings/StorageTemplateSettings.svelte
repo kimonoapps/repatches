@@ -11,7 +11,7 @@
   import { Route } from '$lib/route';
   import { handleSystemConfigSave } from '$lib/services/system-config.service';
   import { getStorageTemplateOptions, type SystemConfigTemplateStorageOptionDto } from '@immich/sdk';
-  import { Code, Heading, IconButton, Link, modalManager, Text } from '@immich/ui';
+  import { Code, Heading, IconButton, modalManager, Text } from '@immich/ui';
   import { mdiInformationOutline } from '@mdi/js';
   import handlebar from 'handlebars';
   import * as luxon from 'luxon';
@@ -267,11 +267,9 @@
         <FormatMessage key="admin.storage_template_more_details">
           {#snippet children({ tag, message })}
             {#if tag === 'template-link'}
-              <Link href="https://docs.immich.app/administration/storage-template">{message}</Link>
+              {message}
             {:else if tag === 'implications-link'}
-              <Link href="https://docs.immich.app/administration/backup-and-restore#asset-types-and-storage-locations">
-                {message}
-              </Link>
+              {message}
             {/if}
           {/snippet}
         </FormatMessage>

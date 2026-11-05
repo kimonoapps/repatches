@@ -28,6 +28,14 @@
   const serverConfig = $derived(serverConfigManager.value);
   const publicConfig = $derived(data.publicConfig);
 
+  // Kimono: while handing off to (or returning from) Kimono sign-in, draw nothing — no login form flash.
+  let redirecting = $state(
+    publicConfig.oauth.enabled &&
+      (oauth.isCallback(location) ||
+        (publicConfig.oauth.autoLaunch && !oauth.isAutoLaunchDisabled(location)) ||
+        oauth.isAutoLaunchEnabled(location)),
+  );
+
   const onSuccess = async (user: LoginResponseDto) => {
     await goto(data.continueUrl, { invalidateAll: true });
     eventManager.emit('AuthLogin', user);
@@ -57,6 +65,7 @@
         console.error('Error [login-form] [oauth.callback]', error);
         oauthError = getServerErrorMessage(error) || $t('errors.unable_to_complete_oauth_login');
         oauthLoading = false;
+        redirecting = false;
         return;
       }
     }
@@ -67,14 +76,16 @@
         oauth.isAutoLaunchEnabled(location)
       ) {
         await goto(Route.login({ autoLaunch: 0 }), { replaceState: true });
-        await oauth.authorize(location);
-        return;
+        if (await oauth.authorize(location)) {
+          return;
+        }
       }
     } catch (error) {
       handleError(error, $t('errors.unable_to_connect'));
     }
 
     oauthLoading = false;
+    redirecting = false;
   });
 
   const handleLogin = async () => {
@@ -125,6 +136,11 @@
     await handleLogin();
   };
 </script>
+
+<!-- Kimono: a flat cover while handing off to Kimono sign-in, so the form never flashes. -->
+{#if redirecting}
+  <div class="fixed inset-0 z-50 bg-white dark:bg-black"></div>
+{/if}
 
 <AuthPageLayout title={data.meta.title}>
   <Stack gap={4}>

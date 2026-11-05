@@ -47,7 +47,7 @@
       <p>
         <FormatMessage key="admin.backup_onboarding_footer">
           {#snippet children({ message })}
-            <Link href="https://docs.immich.app/administration/backup-and-restore/">{message}</Link>
+            {message}
           {/snippet}
         </FormatMessage>
       </p>

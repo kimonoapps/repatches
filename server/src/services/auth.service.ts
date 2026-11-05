@@ -295,6 +295,42 @@ export class AuthService extends BaseService {
     );
   }
 
+  /**
+   * Kimono: when OAuth auto-launch is on, a signed-out browser opening the web app is sent straight to the
+   * identity provider instead of the login page. Returns the authorize URL plus the state/PKCE values the
+   * caller must set as cookies (exactly what POST /oauth/authorize does), or null when auto-launch is off.
+   */
+  async getOAuthAutoLaunch(origin: string) {
+    const { oauth, server } = await this.getConfig({ withCache: false });
+    if (!oauth.enabled || !oauth.autoLaunch) {
+      return null;
+    }
+
+    // Must match what the web app sends as redirectUri: <origin>/auth/login, query string stripped. The
+    // external domain wins when it names the same host, so a proxy that hides https cannot downgrade it.
+    const { externalDomain } = server;
+    const sameHost = !!externalDomain && new URL(externalDomain).host === new URL(origin).host;
+    const base = sameHost ? externalDomain.replace(/\/+$/, '') : origin;
+    return await this.oauthRepository.authorize(oauth, `${base}/auth/login`);
+  }
+
+  async isAuthenticatedRequest(headers: IncomingHttpHeaders, uri: string) {
+    if (!this.getCookieToken(headers)) {
+      return false;
+    }
+
+    try {
+      await this.authenticate({
+        headers,
+        queryParams: {},
+        metadata: { adminRoute: false, sharedLinkRoute: false, uri },
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async callback(dto: OAuthCallbackDto, headers: IncomingHttpHeaders, loginDetails: LoginDetails) {
     const { oauth } = await this.getConfig({ withCache: false });
     if (!oauth.enabled) {

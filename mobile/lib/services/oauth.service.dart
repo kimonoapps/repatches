@@ -3,11 +3,11 @@ import 'package:immich_mobile/services/api.service.dart';
 import 'package:logging/logging.dart';
 import 'package:openapi/api.dart';
 
-// Redirect URL = app.immich:///oauth-callback
+// Redirect URL = app.kimono.photos:///oauth-callback
 
 class OAuthService {
   final ApiService _apiService;
-  final callbackUrlScheme = 'app.immich';
+  final callbackUrlScheme = 'app.kimono.photos';
   final log = Logger('OAuthService');
   OAuthService(this._apiService);
 
@@ -36,8 +36,8 @@ class OAuthService {
 
     log.info('Received OAuth callback: $result');
 
-    if (result.startsWith('app.immich:/oauth-callback')) {
-      result = result.replaceAll('app.immich:/oauth-callback', 'app.immich:///oauth-callback');
+    if (result.startsWith('$callbackUrlScheme:/oauth-callback')) {
+      result = result.replaceAll('$callbackUrlScheme:/oauth-callback', '$callbackUrlScheme:///oauth-callback');
     }
 
     return await _apiService.oAuthApi.finishOAuth(
