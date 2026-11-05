@@ -8,7 +8,9 @@
 # Needs mise with upstream's tools installed (CI: .github/actions/immich-toolchain).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-CO="$(cd "${1:-${REPATCHES_WORK:-$ROOT/work/immich}}" && pwd)"
+CO="${1:-${REPATCHES_WORK:-$ROOT/work/immich}}"
+[[ "$CO" == /* || -d "$CO" ]] || CO="$ROOT/$CO"   # a relative path is the repo's, wherever this runs from
+CO="$(cd "$CO" && pwd)"
 [[ -f "$CO/mise.toml" && -d "$CO/mobile/lib" ]] || { echo "not an immich checkout: $CO" >&2; exit 2; }
 command -v mise >/dev/null || { echo "mise not on PATH (https://mise.jdx.dev); it runs upstream's codegen" >&2; exit 1; }
 export MISE_TRUSTED_CONFIG_PATHS="$CO${MISE_TRUSTED_CONFIG_PATHS:+:$MISE_TRUSTED_CONFIG_PATHS}"

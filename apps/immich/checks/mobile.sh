@@ -16,6 +16,7 @@ CHECKOUT="${REPATCHES_WORK:-$ROOT/work/immich}"; APK=0
 for arg in "$@"; do
   case "$arg" in --apk) APK=1 ;; *) CHECKOUT="$arg" ;; esac
 done
+CHECKOUT="$(cd "$CHECKOUT" 2>/dev/null && pwd || echo "$CHECKOUT")"
 M="$CHECKOUT/mobile"
 [[ -d "$M/lib" ]] || { echo "no mobile app at $M" >&2; exit 2; }
 

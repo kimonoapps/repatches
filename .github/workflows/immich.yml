@@ -156,7 +156,7 @@ jobs:
 
   release-android:
     if: startsWith(github.ref, 'refs/tags/immich/v')
-    needs: [web, android, ios]
+    needs: [web, android]
     runs-on: ubuntu-latest
     environment: mobile-release   # holds the signing key; restrict it to immich/v* tags
     permissions:
