@@ -52,7 +52,7 @@ What must survive upstream changes:
 - Reduced motion: seals don't animate.
 
 diff --git a/web/src/app.css b/web/src/app.css
-index 31ac9eb..9881f5b 100644
+index a4f8f48..f57efba 100644
 --- a/web/src/app.css
 +++ b/web/src/app.css
 @@ -1,5 +1,6 @@
@@ -648,7 +648,7 @@ index 0791df1..7adfa51 100644
  >
    {#if user.profileImagePath}
 diff --git a/web/vite.config.ts b/web/vite.config.ts
-index 1133d01..93544f5 100644
+index b196ca0..72d26d4 100644
 --- a/web/vite.config.ts
 +++ b/web/vite.config.ts
 @@ -29,9 +29,37 @@ const kimonoBrand = (): Plugin => ({

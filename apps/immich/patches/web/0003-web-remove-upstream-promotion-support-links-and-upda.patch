@@ -61,32 +61,32 @@ index 0673285..78fbb41 100644
  
    return defaultProvider({ name: $t('command'), actions: settings });
 diff --git a/web/src/lib/components/admin-settings/StorageTemplateSettings.svelte b/web/src/lib/components/admin-settings/StorageTemplateSettings.svelte
-index e22808b..1f8438e 100644
+index 999fa55..219fb04 100644
 --- a/web/src/lib/components/admin-settings/StorageTemplateSettings.svelte
 +++ b/web/src/lib/components/admin-settings/StorageTemplateSettings.svelte
-@@ -12,7 +12,7 @@
+@@ -11,7 +11,7 @@
    import { Route } from '$lib/route';
    import { handleSystemConfigSave } from '$lib/services/system-config.service';
    import { getStorageTemplateOptions, type SystemConfigTemplateStorageOptionDto } from '@immich/sdk';
--  import { Heading, Link, LoadingSpinner, Text } from '@immich/ui';
-+  import { Heading, LoadingSpinner, Text } from '@immich/ui';
+-  import { Code, Heading, IconButton, Link, modalManager, Text } from '@immich/ui';
++  import { Code, Heading, IconButton, modalManager, Text } from '@immich/ui';
+   import { mdiInformationOutline } from '@mdi/js';
    import handlebar from 'handlebars';
    import * as luxon from 'luxon';
-   import { onDestroy } from 'svelte';
-@@ -112,11 +112,9 @@
-       <FormatMessage key="admin.storage_template_more_details">
-         {#snippet children({ tag, message })}
-           {#if tag === 'template-link'}
--            <Link href="https://docs.immich.app/administration/storage-template">{message}</Link>
-+            {message}
-           {:else if tag === 'implications-link'}
--            <Link href="https://docs.immich.app/administration/backup-and-restore#asset-types-and-storage-locations">
--              {message}
--            </Link>
-+            {message}
-           {/if}
-         {/snippet}
-       </FormatMessage>
+@@ -267,11 +267,9 @@
+         <FormatMessage key="admin.storage_template_more_details">
+           {#snippet children({ tag, message })}
+             {#if tag === 'template-link'}
+-              <Link href="https://docs.immich.app/administration/storage-template">{message}</Link>
++              {message}
+             {:else if tag === 'implications-link'}
+-              <Link href="https://docs.immich.app/administration/backup-and-restore#asset-types-and-storage-locations">
+-                {message}
+-              </Link>
++              {message}
+             {/if}
+           {/snippet}
+         </FormatMessage>
 diff --git a/web/src/lib/components/shared-components/navigation-bar/AccountInfoPanel.svelte b/web/src/lib/components/shared-components/navigation-bar/AccountInfoPanel.svelte
 index 6242309..2a4208f 100644
 --- a/web/src/lib/components/shared-components/navigation-bar/AccountInfoPanel.svelte
@@ -180,7 +180,7 @@ index d9e215d..5d6a203 100644
          </FormatMessage>
        </p>
 diff --git a/web/src/routes/(user)/user-settings/UserSettingsList.svelte b/web/src/routes/(user)/user-settings/UserSettingsList.svelte
-index 91c3256..3e55b28 100644
+index b6595ed..4630038 100644
 --- a/web/src/routes/(user)/user-settings/UserSettingsList.svelte
 +++ b/web/src/routes/(user)/user-settings/UserSettingsList.svelte
 @@ -4,7 +4,6 @@
@@ -199,11 +199,10 @@ index 91c3256..3e55b28 100644
      mdiLockSmart,
      mdiServerOutline,
      mdiTwoFactorAuthentication,
-@@ -147,13 +145,3 @@
- >
+@@ -139,16 +137,6 @@
    <ChangePinCodeSettings />
  </SettingAccordion>
--
+ 
 -<SettingAccordion
 -  icon={mdiKeyOutline}
 -  key={OpenQueryParam.PURCHASE_SETTINGS}
@@ -213,8 +212,12 @@ index 91c3256..3e55b28 100644
 ->
 -  <UserPurchaseSettings />
 -</SettingAccordion>
+-
+ <SettingAccordion
+   icon={mdiAccountGroupOutline}
+   key={OpenQueryParam.SHARING}
 diff --git a/web/src/routes/(user)/utilities/duplicates/[[photos=photos]]/[[assetId=id]]/+page.svelte b/web/src/routes/(user)/utilities/duplicates/[[photos=photos]]/[[assetId=id]]/+page.svelte
-index f673abe..3475642 100644
+index 405d250..a6ff15e 100644
 --- a/web/src/routes/(user)/utilities/duplicates/[[photos=photos]]/[[assetId=id]]/+page.svelte
 +++ b/web/src/routes/(user)/utilities/duplicates/[[photos=photos]]/[[assetId=id]]/+page.svelte
 @@ -3,7 +3,6 @@
@@ -225,12 +228,11 @@ index f673abe..3475642 100644
    import DuplicatesCompareControl from './DuplicatesCompareControl.svelte';
    import { assetViewerManager } from '$lib/managers/asset-viewer-manager.svelte';
    import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
-@@ -255,7 +254,7 @@
-   <div>
+@@ -257,7 +256,6 @@
      {#if duplicates && duplicates.length > 0}
        <Text size="small" color="muted" class="mb-4">
--        <p>{$t('duplicates_description')} <LinkToDocs href="https://docs.immich.app/features/duplicates-utility" /></p>
-+        <p>{$t('duplicates_description')}</p>
+         {$t('duplicates_description')}
+-        <LinkToDocs href="https://docs.immich.app/features/duplicates-utility" />
        </Text>
  
        {#key duplicates[duplicatesIndex].duplicateId}
@@ -310,7 +312,7 @@ index 8976e88..85f7a16 100644
      </div>
    </div>
 diff --git a/web/src/routes/admin/system-settings/AuthSettings.svelte b/web/src/routes/admin/system-settings/AuthSettings.svelte
-index 22118d9..d772ed7 100644
+index 2ef24d5..0fdd5ff 100644
 --- a/web/src/routes/admin/system-settings/AuthSettings.svelte
 +++ b/web/src/routes/admin/system-settings/AuthSettings.svelte
 @@ -10,7 +10,7 @@
@@ -365,26 +367,6 @@ index ce64f64..c3bb751 100644
            {/snippet}
          </FormatMessage>
        </p>
-diff --git a/web/src/routes/auth/onboarding/OnboardingStorageTemplate.svelte b/web/src/routes/auth/onboarding/OnboardingStorageTemplate.svelte
-index aea4d73..342f5b7 100644
---- a/web/src/routes/auth/onboarding/OnboardingStorageTemplate.svelte
-+++ b/web/src/routes/auth/onboarding/OnboardingStorageTemplate.svelte
-@@ -2,14 +2,13 @@
-   import StorageTemplateSettings from '$lib/components/admin-settings/StorageTemplateSettings.svelte';
-   import FormatMessage from '$lib/elements/FormatMessage.svelte';
-   import { authManager } from '$lib/managers/auth-manager.svelte';
--  import { Link } from '@immich/ui';
- </script>
- 
- <div class="flex flex-col">
-   <p>
-     <FormatMessage key="admin.storage_template_onboarding_description_v2">
-       {#snippet children({ message })}
--        <Link href="https://docs.immich.app/administration/storage-template">{message}</Link>
-+        {message}
-       {/snippet}
-     </FormatMessage>
-   </p>
 diff --git a/web/src/routes/maintenance/+page.svelte b/web/src/routes/maintenance/+page.svelte
 index 5662316..f44c7c3 100644
 --- a/web/src/routes/maintenance/+page.svelte
