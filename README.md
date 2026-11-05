@@ -6,7 +6,7 @@ behave like part of Kimono. Nothing upstream is forked or vendored.
 
 | App | Upstream | Becomes | Outputs |
 | --- | --- | --- | --- |
-| `immich` | [immich-app/immich](https://github.com/immich-app/immich) `v3.1.0` | Kimono Photos | server image (web included), Android APK, iPhone (TestFlight) |
+| `immich` | [immich-app/immich](https://github.com/immich-app/immich) `v3.3.6` | Kimono Photos | server image (web included), Android APK, iPhone (TestFlight) |
 
 ## Layout
 
