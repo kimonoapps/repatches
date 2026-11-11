@@ -71,6 +71,16 @@ make a patch pass.
 - The vector adaptive-icon layers `drawable/ic_launcher_{foreground,monochrome}.xml`
   are deleted, because branding ships PNGs with the same names.
 
+## 5. Tells Kimono its version — `0005-mobile-Tell-Kimono-which-version-is-installed.patch`
+
+- The iPhone app is also in Kimono's App Group `group.app.kimono` (beside its
+  own `group.app.kimono.photos`), in `Runner.entitlements` and
+  `RunnerProfile.entitlements`.
+- On every launch `AppDelegate.swift` writes `CFBundleShortVersionString` and
+  `CFBundleVersion` to that group's `UserDefaults` as
+  `<bundle id>.version` and `<bundle id>.build`. Kimono reads them to offer
+  TestFlight's newer build as an update; iOS gives it no other way to know.
+
 ## Artwork (not a patch)
 
 `branding/mobile/install.sh` copies `branding/mobile/files/` over upstream's

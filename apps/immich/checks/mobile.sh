@@ -32,6 +32,8 @@ expect "Android launcher label is Kimono Photos" grep -q 'android:label="Kimono 
 absent "no Android label mentions Immich (release or debug)" grep -rn 'android:label="[^"]*Immich' "$M/android/app/src/main/AndroidManifest.xml" "$M/android/app/src/debug/AndroidManifest.xml"
 expect "iOS bundle id is app.kimono.photos" grep -Eq '^IMMICH_BUNDLE_ID_PROD = app\.kimono\.photos$' "$M/ios/Signing.xcconfig"
 expect "iOS App Group is group.app.kimono.photos" grep -Eq '^IMMICH_GROUP_ID = group\.app\.kimono\.photos$' "$M/ios/Signing.xcconfig"
+expect "iPhone app shares group.app.kimono" grep -q '<string>group.app.kimono</string>' "$M/ios/Runner/Runner.entitlements"
+expect "iPhone app tells Kimono its version" grep -q 'suiteName: "group.app.kimono"' "$M/ios/Runner/AppDelegate.swift"
 expect "iOS display name is Kimono Photos" grep -A1 -q 'CFBundleDisplayName' "$M/ios/Runner/Info.plist"
 expect "  ...and it says Kimono Photos" bash -c "grep -A1 CFBundleDisplayName '$M/ios/Runner/Info.plist' | grep -q 'Kimono Photos'"
 expect "kimono-photos:// is declared on Android" grep -q 'android:scheme="kimono-photos"' "$M/android/app/src/main/AndroidManifest.xml"

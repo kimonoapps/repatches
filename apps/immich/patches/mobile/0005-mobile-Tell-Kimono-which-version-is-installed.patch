@@ -1,0 +1,58 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: akram-composio <akram@composio.dev>
+Date: Tue, 10 Nov 2026 22:12:05 -0800
+Subject: [PATCH] mobile: Tell Kimono which version is installed
+
+Kimono offers TestFlight's newer Kimono Photos as an update, as it does the
+APK on Android, but iOS won't tell one app another's version. So the app
+joins Kimono's App Group, group.app.kimono, and leaves its version and
+build there on each launch.
+
+Must survive upstream changes:
+- Runner.entitlements and RunnerProfile.entitlements list group.app.kimono
+  beside $(CUSTOM_GROUP_ID).
+- At launch, AppDelegate writes CFBundleShortVersionString and
+  CFBundleVersion to UserDefaults(suiteName: "group.app.kimono") as
+  <bundle id>.version and <bundle id>.build.
+
+diff --git a/mobile/ios/Runner/AppDelegate.swift b/mobile/ios/Runner/AppDelegate.swift
+index e1ff3b1..25808cf 100644
+--- a/mobile/ios/Runner/AppDelegate.swift
++++ b/mobile/ios/Runner/AppDelegate.swift
+@@ -15,6 +15,12 @@ import native_video_player
+     URLSessionManager.patchBackgroundDownloader()
+     BackgroundWorkerApiImpl.registerBackgroundWorkers()
+ 
++    // Kimono reads this build's version from the app group it shares, to offer TestFlight's newer one.
++    if let kimono = UserDefaults(suiteName: "group.app.kimono"), let id = Bundle.main.bundleIdentifier {
++      kimono.set(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String, forKey: "\(id).version")
++      kimono.set(Bundle.main.infoDictionary?["CFBundleVersion"] as? String, forKey: "\(id).build")
++    }
++
+     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+   }
+ 
+diff --git a/mobile/ios/Runner/Runner.entitlements b/mobile/ios/Runner/Runner.entitlements
+index 9f15cc4..16abd1f 100644
+--- a/mobile/ios/Runner/Runner.entitlements
++++ b/mobile/ios/Runner/Runner.entitlements
+@@ -7,6 +7,7 @@
+ 	<key>com.apple.security.application-groups</key>
+ 	<array>
+ 		<string>$(CUSTOM_GROUP_ID)</string>
++		<string>group.app.kimono</string>
+ 	</array>
+ </dict>
+ </plist>
+diff --git a/mobile/ios/Runner/RunnerProfile.entitlements b/mobile/ios/Runner/RunnerProfile.entitlements
+index b7930d5..a8a812f 100644
+--- a/mobile/ios/Runner/RunnerProfile.entitlements
++++ b/mobile/ios/Runner/RunnerProfile.entitlements
+@@ -9,6 +9,7 @@
+ 	<key>com.apple.security.application-groups</key>
+ 	<array>
+ 		<string>$(CUSTOM_GROUP_ID)</string>
++		<string>group.app.kimono</string>
+ 	</array>
+ </dict>
+ </plist>
