@@ -6,7 +6,6 @@ import 'dart:math';
 import 'package:auto_route/auto_route.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart' hide Store;
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -15,6 +14,7 @@ import 'package:immich_mobile/entities/store.entity.dart';
 import 'package:immich_mobile/extensions/build_context_extensions.dart';
 import 'package:immich_mobile/generated/translations.g.dart';
 import 'package:immich_mobile/infrastructure/repositories/settings.repository.dart';
+import 'package:immich_mobile/kimono/kimono_connect.dart';
 import 'package:immich_mobile/providers/auth.provider.dart';
 import 'package:immich_mobile/providers/background_sync.provider.dart';
 import 'package:immich_mobile/providers/feature_message.provider.dart';
@@ -22,7 +22,6 @@ import 'package:immich_mobile/providers/gallery_permission.provider.dart';
 import 'package:immich_mobile/providers/oauth.provider.dart';
 import 'package:immich_mobile/providers/server_info.provider.dart';
 import 'package:immich_mobile/providers/view_intent/view_intent_handler.provider.dart';
-import 'package:immich_mobile/providers/websocket.provider.dart';
 import 'package:immich_mobile/repositories/permission.repository.dart';
 import 'package:immich_mobile/routing/router.dart';
 import 'package:immich_mobile/utils/provider_utils.dart';
@@ -42,40 +41,18 @@ class LoginForm extends HookConsumerWidget {
 
   final log = Logger('LoginForm');
 
-  String? _validateUrl(String? url) =>
-      normalizeAndValidateServerUrl(url) ? null : StaticTranslations.instance.login_form_err_invalid_url;
-
-  String? _validateEmail(String? email) {
-    if (email == null || email == '') {
-      return null;
-    }
-    if (email.endsWith(' ')) {
-      return StaticTranslations.instance.login_form_err_trailing_whitespace;
-    }
-    if (email.startsWith(' ')) {
-      return StaticTranslations.instance.login_form_err_leading_whitespace;
-    }
-    if (email.contains(' ') || !email.contains('@')) {
-      return StaticTranslations.instance.login_form_err_invalid_email;
-    }
-    return null;
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final emailController = useTextEditingController.fromValue(TextEditingValue.empty);
-    final passwordController = useTextEditingController.fromValue(TextEditingValue.empty);
     final serverEndpointController = useTextEditingController.fromValue(TextEditingValue.empty);
-    final passwordFocusNode = useFocusNode();
     final isOauthEnable = useState<bool>(false);
     final isPasswordLoginEnable = useState<bool>(false);
     final oAuthButtonLabel = useState<String>('OAuth');
-    final logoAnimationController = useAnimationController(duration: const Duration(seconds: 60));
-    unawaited(logoAnimationController.repeat());
     final serverInfo = ref.watch(serverInfoProvider);
     final warningMessage = useState<String?>(null);
     final loginFormKey = GlobalKey<FormState>();
     final ValueNotifier<String?> serverEndpoint = useState<String?>(null);
+    final connecting = useState<bool>(KimonoConnect.server != null);
+    final oauthFailed = useState<bool>(false);
 
     Future<void> checkVersionMismatch() async {
       try {
@@ -162,26 +139,6 @@ class LoginForm extends HookConsumerWidget {
       }
     }
 
-    useEffect(() {
-      final serverUrl = getServerUrl();
-      if (serverUrl != null) {
-        serverEndpointController.text = serverUrl;
-      }
-      return null;
-    }, []);
-
-    void populateTestLoginInfo() {
-      emailController.text = 'demo@immich.app';
-      passwordController.text = 'demo';
-      serverEndpointController.text = 'https://demo.immich.app';
-    }
-
-    void populateTestLoginInfo1() {
-      emailController.text = 'testuser@email.com';
-      passwordController.text = 'password';
-      serverEndpointController.text = 'http://10.1.15.216:2283/api';
-    }
-
     Future<void> handleSyncFlow() async {
       final backgroundManager = ref.read(backgroundSyncProvider);
       final viewIntentHandler = ref.read(viewIntentHandlerProvider);
@@ -249,55 +206,6 @@ class LoginForm extends HookConsumerWidget {
 
     bool isSyncRemoteDeletionsMode() => Platform.isAndroid && Store.get(StoreKey.manageLocalMediaAndroid, false);
 
-    Future<void> login() async {
-      TextInput.finishAutofillContext();
-
-      // Invalidate all api repository provider instance to take into account new access token
-      invalidateAllApiRepositoryProviders(ref);
-
-      try {
-        final result = await ref.read(authProvider.notifier).login(emailController.text, passwordController.text);
-
-        if (!context.mounted) {
-          return;
-        }
-
-        if (result.shouldChangePassword && !result.isAdmin) {
-          unawaited(context.pushRoute(const ChangePasswordRoute()));
-          passwordController.clear();
-        } else {
-          await ref.read(galleryPermissionNotifier.notifier).requestGalleryPermission();
-          if (isSyncRemoteDeletionsMode()) {
-            await getManageMediaPermission();
-          }
-          unawaited(handleSyncFlow());
-          if (!context.mounted) {
-            return;
-          }
-
-          ref.read(websocketProvider.notifier).connect();
-          unawaited(ref.read(featureMessageServiceProvider).markSeen());
-          if (!context.mounted) {
-            return;
-          }
-
-          unawaited(context.router.replaceAll([const TabShellRoute()]));
-          return;
-        }
-      } catch (error) {
-        if (!context.mounted) {
-          return;
-        }
-
-        ImmichToast.show(
-          context: context,
-          msg: context.t.login_form_failed_login,
-          toastType: ToastType.error,
-          gravity: ToastGravity.TOP,
-        );
-      }
-    }
-
     String generateRandomString(int length) {
       const chars = 'AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz1234567890';
       final random = Random.secure();
@@ -322,7 +230,7 @@ class LoginForm extends HookConsumerWidget {
       return base64Url.encode(digest.bytes).replaceAll('=', '');
     }
 
-    Future<void> oAuthLogin() async {
+    Future<bool> oAuthLogin() async {
       final oAuthService = ref.read(oAuthServiceProvider);
       String? oAuthServerUrl;
 
@@ -344,7 +252,7 @@ class LoginForm extends HookConsumerWidget {
         log.severe('Error getting OAuth server Url: $error', stack);
 
         if (!context.mounted) {
-          return;
+          return false;
         }
 
         ImmichToast.show(
@@ -353,7 +261,7 @@ class LoginForm extends HookConsumerWidget {
           toastType: ToastType.error,
           gravity: ToastGravity.TOP,
         );
-        return;
+        return false;
       }
 
       if (oAuthServerUrl != null) {
@@ -361,7 +269,7 @@ class LoginForm extends HookConsumerWidget {
           final loginResponseDto = await oAuthService.oAuthLogin(oAuthServerUrl, state, codeVerifier);
 
           if (loginResponseDto == null || !context.mounted) {
-            return;
+            return false;
           }
 
           log.info("Finished OAuth login with response: ${loginResponseDto.userEmail}");
@@ -377,18 +285,18 @@ class LoginForm extends HookConsumerWidget {
             }
             unawaited(handleSyncFlow());
             if (!context.mounted) {
-              return;
+              return true;
             }
 
             unawaited(ref.read(featureMessageServiceProvider).markSeen());
             unawaited(context.router.replaceAll([const TabShellRoute()]));
-            return;
+            return true;
           }
         } catch (error, stack) {
           log.severe('Error logging in with OAuth: $error', stack);
 
           if (!context.mounted) {
-            return;
+            return false;
           }
 
           ImmichToast.show(
@@ -400,7 +308,7 @@ class LoginForm extends HookConsumerWidget {
         } finally {}
       } else {
         if (!context.mounted) {
-          return;
+          return false;
         }
 
         ImmichToast.show(
@@ -409,9 +317,45 @@ class LoginForm extends HookConsumerWidget {
           toastType: ToastType.info,
           gravity: ToastGravity.TOP,
         );
+        return false;
+      }
+      return false;
+    }
+
+    Future<void> connect() async {
+      final server = KimonoConnect.server;
+      if (server == null) {
+        connecting.value = false;
         return;
       }
+      serverEndpointController.text = server;
+      serverEndpoint.value = null;
+      connecting.value = true;
+      oauthFailed.value = false;
+      await getServerAuthSettings();
+      if (!context.mounted) {
+        return;
+      }
+      if (serverEndpoint.value != null && isOauthEnable.value && !KimonoConnect.signedOut) {
+        await KimonoConnect.untilForeground();
+        if (!context.mounted) {
+          return;
+        }
+        final signedIn = await oAuthLogin();
+        if (!context.mounted) {
+          return;
+        }
+        oauthFailed.value = !signedIn;
+      }
+      connecting.value = false;
     }
+
+    useEffect(() {
+      void onLink() => unawaited(connect());
+      KimonoConnect.requests.addListener(onLink);
+      unawaited(connect());
+      return () => KimonoConnect.requests.removeListener(onLink);
+    }, []);
 
     SingleChildRenderObjectWidget buildVersionCompatWarning() {
       unawaited(checkVersionMismatch());
@@ -444,96 +388,56 @@ class LoginForm extends HookConsumerWidget {
       );
     }
 
-    final serverSelectionOrLogin = serverEndpoint.value == null
+    final serverSelectionOrLogin = connecting.value
+        ? const Padding(
+            padding: EdgeInsets.only(top: ImmichSpacing.md),
+            child: Center(child: CircularProgressIndicator()),
+          )
+        : serverEndpoint.value == null
         ? Padding(
             padding: const EdgeInsets.only(top: ImmichSpacing.md),
             child: Column(
               mainAxisSize: MainAxisSize.max,
               children: [
-                ImmichForm(
-                  onSubmit: getServerAuthSettings,
-                  submitText: context.t.next,
-                  submitIcon: Icons.arrow_forward_rounded,
-                  builder: (_, form) => ImmichURLInput(
-                    controller: serverEndpointController,
-                    label: context.t.login_form_endpoint_url,
-                    hintText: context.t.login_form_endpoint_hint,
-                    validator: _validateUrl,
-                    keyboardAction: .next,
-                    onSubmit: (_) => form.submit(),
+                if (KimonoConnect.server == null)
+                  Text(
+                    'Open Photos from Kimono on this phone to connect.',
+                    style: context.textTheme.bodyLarge,
+                    textAlign: TextAlign.center,
+                  )
+                else
+                  ImmichTextButton(
+                    labelText: 'Try again',
+                    icon: Icons.refresh_rounded,
+                    variant: ImmichVariant.ghost,
+                    onPressed: () => unawaited(connect()),
                   ),
-                ),
-                ImmichTextButton(
-                  labelText: context.t.settings,
-                  icon: Icons.settings,
-                  variant: ImmichVariant.ghost,
-                  onPressed: () => context.pushRoute(const SettingsRoute()),
-                ),
               ],
             ),
           )
-        : AutofillGroup(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.max,
-              children: [
-                buildVersionCompatWarning(),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: ImmichSpacing.md),
-                  child: Text(
-                    normalizeServerUrl(serverEndpointController.text),
-                    style: context.textTheme.displaySmall,
-                    textAlign: TextAlign.center,
-                  ),
+        // Kimono is the only way in: no email and password form, ever.
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.max,
+            children: [
+              buildVersionCompatWarning(),
+              if (isOauthEnable.value)
+                ImmichForm(
+                  onSubmit: () async {
+                    KimonoConnect.signedOut = false;
+                    oauthFailed.value = !await oAuthLogin();
+                  },
+                  submitText: oAuthButtonLabel.value,
+                  submitIcon: Icons.pin_outlined,
+                  builder: (context, _) => const SizedBox.shrink(),
+                )
+              else
+                Text(
+                  'Kimono sign-in is off for Photos.',
+                  style: context.textTheme.bodyLarge,
+                  textAlign: TextAlign.center,
                 ),
-                if (isPasswordLoginEnable.value)
-                  ImmichForm(
-                    onSubmit: login,
-                    submitText: context.t.login,
-                    submitIcon: Icons.login_rounded,
-                    builder: (context, form) => Column(
-                      spacing: ImmichSpacing.md,
-                      children: [
-                        ImmichEmailInput(
-                          controller: emailController,
-                          label: context.t.email,
-                          hintText: context.t.login_form_email_hint,
-                          validator: _validateEmail,
-                          keyboardAction: TextInputAction.next,
-                          onSubmit: (_) => passwordFocusNode.requestFocus(),
-                        ),
-                        ImmichPasswordInput(
-                          controller: passwordController,
-                          focusNode: passwordFocusNode,
-                          label: context.t.password,
-                          hintText: context.t.login_form_password_hint,
-                          keyboardAction: TextInputAction.go,
-                          onSubmit: (_) => form.submit(),
-                        ),
-                      ],
-                    ),
-                  ),
-                if (isOauthEnable.value)
-                  ImmichForm(
-                    onSubmit: oAuthLogin,
-                    submitText: oAuthButtonLabel.value,
-                    submitIcon: Icons.pin_outlined,
-                    builder: (context, _) => isPasswordLoginEnable.value
-                        ? Padding(
-                            padding: const EdgeInsets.only(left: 18.0, right: 18.0, top: 12.0),
-                            child: Divider(color: context.isDarkTheme ? Colors.white : Colors.black, height: 5),
-                          )
-                        : const SizedBox.shrink(),
-                  ),
-                if (!isOauthEnable.value && !isPasswordLoginEnable.value) Center(child: Text(context.t.login_disabled)),
-                ImmichTextButton(
-                  labelText: context.t.back,
-                  icon: Icons.arrow_back,
-                  variant: ImmichVariant.ghost,
-                  onPressed: () => serverEndpoint.value = null,
-                ),
-              ],
-            ),
+            ],
           );
 
     return LayoutBuilder(
@@ -547,16 +451,12 @@ class LoginForm extends HookConsumerWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   SizedBox(height: constraints.maxHeight / 5),
-                  Column(
+                  const Column(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      GestureDetector(
-                        onDoubleTap: () => populateTestLoginInfo(),
-                        onLongPress: () => populateTestLoginInfo1(),
-                        child: RotationTransition(turns: logoAnimationController, child: const ImmichLogo()),
-                      ),
-                      const Padding(padding: EdgeInsets.only(top: 8.0, bottom: 16), child: ImmichTitleText()),
+                      ImmichLogo(),
+                      Padding(padding: EdgeInsets.only(top: 8.0, bottom: 16), child: ImmichTitleText()),
                     ],
                   ),
 

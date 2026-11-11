@@ -136,7 +136,8 @@ enum ActionButtonType {
             context.timelineOrigin != TimelineOrigin.trash &&
             !context.isInLockedView && //
             context.isStacked,
-      ActionButtonType.openInBrowser => context.asset.hasRemote && !context.isInLockedView,
+      // Kimono: opening the server in a browser shows its address, which the app never does.
+      ActionButtonType.openInBrowser => false,
       ActionButtonType.likeActivity =>
         !context.isInLockedView &&
             context.currentAlbum != null &&

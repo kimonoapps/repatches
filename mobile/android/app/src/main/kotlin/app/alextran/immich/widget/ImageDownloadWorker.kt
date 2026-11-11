@@ -108,7 +108,7 @@ class ImageDownloadWorker(
             glanceId,
             "",
             "",
-            "immich://",
+            "kimono-photos://",
             WidgetState.LOG_IN
           )
         }

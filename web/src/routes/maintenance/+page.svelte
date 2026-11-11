@@ -6,7 +6,7 @@
   import { handleSetMaintenanceMode } from '$lib/services/maintenance.service';
   import { maintenanceStore } from '$lib/stores/maintenance.store';
   import { MaintenanceAction } from '@immich/sdk';
-  import { Button, Heading, Link, ProgressBar, Scrollable, Text } from '@immich/ui';
+  import { Button, Heading, ProgressBar, Scrollable, Text } from '@immich/ui';
   import { t } from 'svelte-i18n';
   import type { PageData } from './$types';
 
@@ -73,9 +73,7 @@
         <FormatMessage key="maintenance_description">
           {#snippet children({ tag, message })}
             {#if tag === 'link'}
-              <Link href="https://docs.immich.app/administration/maintenance-mode">
-                {message}
-              </Link>
+              {message}
             {/if}
           {/snippet}
         </FormatMessage>

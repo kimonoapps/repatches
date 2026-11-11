@@ -709,6 +709,59 @@ describe(AuthService.name, () => {
     });
   });
 
+  describe('getOAuthAutoLaunch', () => {
+    it('should do nothing when auto-launch is off', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({ oauth: { enabled: true, autoLaunch: false } });
+
+      await expect(sut.getOAuthAutoLaunch('https://photos.test')).resolves.toBeNull();
+      expect(mocks.oauth.authorize).not.toHaveBeenCalled();
+    });
+
+    it('should do nothing when OAuth is disabled', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({ oauth: { enabled: false, autoLaunch: true } });
+
+      await expect(sut.getOAuthAutoLaunch('https://photos.test')).resolves.toBeNull();
+    });
+
+    it('should authorize back to the web login page', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({ oauth: { enabled: true, autoLaunch: true } });
+      mocks.oauth.authorize.mockResolvedValue({ url: 'https://idp/authorize', state: 's', codeVerifier: 'v' });
+
+      await expect(sut.getOAuthAutoLaunch('https://photos.test')).resolves.toEqual({
+        url: 'https://idp/authorize',
+        state: 's',
+        codeVerifier: 'v',
+      });
+      expect(mocks.oauth.authorize).toHaveBeenCalledWith(
+        expect.objectContaining({ autoLaunch: true }),
+        'https://photos.test/auth/login',
+      );
+    });
+
+    it('should prefer the external domain for the same host', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        oauth: { enabled: true, autoLaunch: true },
+        server: { externalDomain: 'https://photos.example/' },
+      });
+      mocks.oauth.authorize.mockResolvedValue({ url: 'https://idp/authorize', state: 's', codeVerifier: 'v' });
+
+      // eslint-disable-next-line unicorn/prefer-https
+      await sut.getOAuthAutoLaunch('http://photos.example');
+      expect(mocks.oauth.authorize).toHaveBeenCalledWith(expect.anything(), 'https://photos.example/auth/login');
+    });
+
+    it('should keep the request origin for another host', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        oauth: { enabled: true, autoLaunch: true },
+        server: { externalDomain: 'https://photos.example' },
+      });
+      mocks.oauth.authorize.mockResolvedValue({ url: 'https://idp/authorize', state: 's', codeVerifier: 'v' });
+
+      await sut.getOAuthAutoLaunch('https://10.0.0.2:2283');
+      expect(mocks.oauth.authorize).toHaveBeenCalledWith(expect.anything(), 'https://10.0.0.2:2283/auth/login');
+    });
+  });
+
   describe('callback', () => {
     it('should throw an error if OAuth is not enabled', async () => {
       await expect(

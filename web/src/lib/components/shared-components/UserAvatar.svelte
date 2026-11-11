@@ -79,6 +79,7 @@
 
 <figure
   class="{sizeClass} {colorClass} {interactiveClass} overflow-hidden rounded-full shadow-md"
+  data-k-avatar
   title={noTitle ? undefined : title}
 >
   {#if user.profileImagePath}
