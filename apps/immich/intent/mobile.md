@@ -73,13 +73,16 @@ make a patch pass.
 
 ## 5. Tells Kimono its version — `0005-mobile-Tell-Kimono-which-version-is-installed.patch`
 
-- The iPhone app is also in Kimono's App Group `group.app.kimono` (beside its
-  own `group.app.kimono.photos`), in `Runner.entitlements` and
-  `RunnerProfile.entitlements`.
-- On every launch `AppDelegate.swift` writes `CFBundleShortVersionString` and
-  `CFBundleVersion` to that group's `UserDefaults` as
-  `<bundle id>.version` and `<bundle id>.build`. Kimono reads them to offer
-  TestFlight's newer build as an update; iOS gives it no other way to know.
+- The iPhone app shares Kimono's keychain group: `keychain-access-groups` in
+  `Runner.entitlements` and `RunnerProfile.entitlements` lists
+  `$(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)` first (so upstream's own
+  keychain items stay where they were), then `$(AppIdentifierPrefix)app.kimono.shared`.
+  `Info.plist` names the shared one as `KimonoKeychainGroup`.
+- On every launch `AppDelegate.swift` writes `"<CFBundleShortVersionString>\n<CFBundleVersion>"`
+  there as a generic password (service `app.kimono.installed`, account the bundle
+  ID). Kimono reads it to offer TestFlight's newer build as an update; iOS gives
+  it no other way to know. Not an App Group: that needs the App ID set up by
+  hand, and CI's automatic signing can't.
 
 ## Artwork (not a patch)
 
