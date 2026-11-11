@@ -34,6 +34,7 @@ expect "iOS bundle id is app.kimono.photos" grep -Eq '^IMMICH_BUNDLE_ID_PROD = a
 expect "iOS App Group is group.app.kimono.photos" grep -Eq '^IMMICH_GROUP_ID = group\.app\.kimono\.photos$' "$M/ios/Signing.xcconfig"
 expect "iPhone app shares Kimono's keychain group" grep -q '<string>$(AppIdentifierPrefix)app.kimono.shared</string>' "$M/ios/Runner/Runner.entitlements"
 expect "iPhone app tells Kimono its version" grep -q '"app.kimono.installed"' "$M/ios/Runner/AppDelegate.swift"
+expect "iPhone build number is the release's" grep -q '<string>$(FLUTTER_BUILD_NUMBER)</string>' "$M/ios/Runner/Info.plist"
 expect "iOS display name is Kimono Photos" grep -A1 -q 'CFBundleDisplayName' "$M/ios/Runner/Info.plist"
 expect "  ...and it says Kimono Photos" bash -c "grep -A1 CFBundleDisplayName '$M/ios/Runner/Info.plist' | grep -q 'Kimono Photos'"
 expect "kimono-photos:// is declared on Android" grep -q 'android:scheme="kimono-photos"' "$M/android/app/src/main/AndroidManifest.xml"

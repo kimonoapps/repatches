@@ -78,6 +78,10 @@ make a patch pass.
   `$(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)` first (so upstream's own
   keychain items stay where they were), then `$(AppIdentifierPrefix)app.kimono.shared`.
   `Info.plist` names the shared one as `KimonoKeychainGroup`.
+- `Info.plist` takes `CFBundleShortVersionString` and `CFBundleVersion` from
+  `$(FLUTTER_BUILD_NAME)` and `$(FLUTTER_BUILD_NUMBER)`. Upstream hardcodes them,
+  which ignores the release's `--build-number`: TestFlight then refuses every
+  upload after the first ("must be higher than the previously uploaded version").
 - On every launch `AppDelegate.swift` writes `"<CFBundleShortVersionString>\n<CFBundleVersion>"`
   there as a generic password (service `app.kimono.installed`, account the bundle
   ID). Kimono reads it to offer TestFlight's newer build as an update; iOS gives

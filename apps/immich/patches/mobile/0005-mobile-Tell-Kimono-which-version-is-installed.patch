@@ -14,6 +14,10 @@ Must survive upstream changes:
   $(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER) first (still the default
   group, where upstream's own keychain items go), then
   $(AppIdentifierPrefix)app.kimono.shared.
+- Info.plist takes CFBundleShortVersionString and CFBundleVersion from
+  $(FLUTTER_BUILD_NAME) and $(FLUTTER_BUILD_NUMBER). Upstream hardcodes them
+  (3.3.6 and 4), which ignores the release's --build-number: TestFlight then
+  refuses every upload after the first, and Kimono can't compare builds.
 - Info.plist KimonoKeychainGroup is $(AppIdentifierPrefix)app.kimono.shared.
 - At launch, AppDelegate writes "<version>\n<build>" as a generic password,
   service app.kimono.installed, account the bundle ID, in that group.
@@ -49,7 +53,7 @@ index e1ff3b1..ac26092 100644
    }
  
 diff --git a/mobile/ios/Runner/Info.plist b/mobile/ios/Runner/Info.plist
-index 2879b9c..edb3235 100644
+index 2879b9c..3eb8369 100644
 --- a/mobile/ios/Runner/Info.plist
 +++ b/mobile/ios/Runner/Info.plist
 @@ -13,6 +13,8 @@
@@ -61,6 +65,24 @@ index 2879b9c..edb3235 100644
      <key>CFBundleDisplayName</key>
      <string>Kimono Photos</string>
      <key>CFBundleDocumentTypes</key>
+@@ -78,7 +80,7 @@
+     <key>CFBundlePackageType</key>
+     <string>APPL</string>
+     <key>CFBundleShortVersionString</key>
+-    <string>3.3.6</string>
++    <string>$(FLUTTER_BUILD_NAME)</string>
+     <key>CFBundleSignature</key>
+     <string>????</string>
+     <key>CFBundleURLTypes</key>
+@@ -105,7 +107,7 @@
+       </dict>
+     </array>
+     <key>CFBundleVersion</key>
+-    <string>4</string>
++    <string>$(FLUTTER_BUILD_NUMBER)</string>
+     <key>ITSAppUsesNonExemptEncryption</key>
+     <false />
+     <key>LSApplicationQueriesSchemes</key>
 diff --git a/mobile/ios/Runner/Runner.entitlements b/mobile/ios/Runner/Runner.entitlements
 index 9f15cc4..8db45ea 100644
 --- a/mobile/ios/Runner/Runner.entitlements
