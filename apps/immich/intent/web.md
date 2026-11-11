@@ -160,3 +160,17 @@ Photos must look like the same product as the Kimono Portal.
     network, and has headless Chromium require that colour on screen, the cluster marker, and an
     uncovered canvas.
 
+
+## 0006 Get the app from Kimono (`web: send "Get the app" to Kimono's own page`)
+
+The phone app comes from Kimono, never upstream's stores, F-Droid or Obtainium.
+
+- **Server redirect.** The web index middleware (`ApiService.ssr`) answers GET/HEAD `/get-app`
+  with a **302** to `KIMONO_GET_APP_URL` (Kimono sets it to `<portal>/get-app`), keeping the
+  query (`?for=ios`). It runs before the sign-in redirect. With the variable unset or not an
+  http(s) URL, `/get-app` is served as an ordinary page.
+- **Web.** Utilities' Download section and the onboarding "Mobile App" step each show one
+  "Get the app" link to `/get-app` (`data-sveltekit-reload`, so the browser asks the server).
+  `AppDownloadModal` and `ObtainiumConfigModal` stay in the tree but are imported nowhere.
+- **Copy.** `app_download_links` reads "Get the app"; `mobile_app_download_onboarding_note` names
+  the Kimono app, not app stores.

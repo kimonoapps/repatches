@@ -134,6 +134,19 @@ check "no immich.app / GitHub / Discord links in mounted UI" no_matches links -r
 check "server: auto-launch redirect hook in the web index middleware" \
   grep -q 'redirectToOAuth(request, res)' server/src/services/api.service.ts
 check "server: AuthService.getOAuthAutoLaunch present" grep -q 'async getOAuthAutoLaunch' server/src/services/auth.service.ts
+# The phone app comes from Kimono: no store badges, F-Droid or Obtainium (all upstream's app), only /get-app.
+no_store_ui() {
+  local hits=0 c
+  for c in AppDownloadModal ObtainiumConfigModal; do
+    if grep -rlE "import .*${c}" web/src | grep -v "/${c}\.svelte$" | grep -q .; then
+      echo "    $c is still imported by: $(grep -rlE "import .*${c}" web/src | tr '\n' ' ')"; hits=1
+    fi
+  done
+  return $hits
+}
+check "app store / Obtainium links unmounted" no_store_ui
+check "Get the app links go to /get-app" grep -q 'href="/get-app"' 'web/src/routes/(user)/utilities/UtilitiesMenu.svelte' web/src/routes/auth/onboarding/OnboardingMobileApp.svelte
+check "server: /get-app redirects to KIMONO_GET_APP_URL" grep -q 'KIMONO_GET_APP_URL' server/src/services/api.service.ts
 end_stage
 
 # ─── 2. build ────────────────────────────────────────────────────────────────────────────────
@@ -244,6 +257,7 @@ services:
     image: $IMAGE
     environment:
       IMMICH_CONFIG_FILE: /config/config.json
+      KIMONO_GET_APP_URL: https://kimono.smoke.test/get-app
       DB_HOSTNAME: database
       DB_USERNAME: immich
       DB_PASSWORD: smoke
@@ -326,6 +340,8 @@ check "escape hatch: /auth/login?autoLaunch=0 serves the page" expect_page '/aut
 check "escape hatch: /auth/login?password=1 serves the page" expect_page '/auth/login?password=1'
 check "OAuth callback /auth/login?code=…&state=… serves the page" expect_page '/auth/login?code=x&state=y'
 check "deep links (/photos) still serve the app" expect_page /photos
+get_app_ok() { [[ "$(head_of "$APP/get-app?for=ios")" == "302 https://kimono.smoke.test/get-app?for=ios" ]]; }
+check "GET /get-app?for=ios redirects to Kimono's page, query kept" get_app_ok
 share_ok() { [[ "$(head_of "$APP/s/missing")" == "404 " ]]; }
 check "share links (/s/…) are not redirected" share_ok
 api_ok() { [[ "$(curl -sS "$APP/api/server/ping")" == '{"res":"pong"}' ]] &&

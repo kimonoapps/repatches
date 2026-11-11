@@ -1,0 +1,170 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: akram-composio <akram@composio.dev>
+Date: Tue, 10 Nov 2026 19:36:12 -0800
+Subject: [PATCH] web: send "Get the app" to Kimono's own page
+
+Why: the phone app comes from Kimono (TestFlight on iPhone, Kimono's APK on
+Android). Upstream's store badges, F-Droid and Obtainium all install Immich.
+
+What must survive upstream changes:
+- Server: the web index middleware (ApiService.ssr in server/src/services/
+  api.service.ts) answers GET/HEAD /get-app with a 302 to KIMONO_GET_APP_URL,
+  query kept, before the sign-in redirect. Unset or not http(s): no redirect.
+- Web: Utilities' Download section and the onboarding Mobile App step show one
+  "Get the app" link to /get-app with data-sveltekit-reload, so it reaches the
+  server. AppDownloadModal and ObtainiumConfigModal are imported nowhere.
+- en.json: app_download_links is "Get the app"; the onboarding note names the
+  Kimono app.
+
+diff --git a/i18n/en.json b/i18n/en.json
+index 51e37a5..62d7d0b 100644
+--- a/i18n/en.json
++++ b/i18n/en.json
+@@ -569,7 +569,7 @@
+   "app_architecture_variant": "Variant (Architecture)",
+   "app_bar_signout_dialog_content": "Are you sure you want to sign out?",
+   "app_bar_signout_dialog_title": "Sign out",
+-  "app_download_links": "App Download Links",
++  "app_download_links": "Get the app",
+   "app_settings": "App Settings",
+   "app_stores": "App Stores",
+   "app_update_available": "App update is available",
+@@ -1495,7 +1495,7 @@
+   "minutes": "Minutes",
+   "missing": "Missing",
+   "mobile_app": "Mobile App",
+-  "mobile_app_download_onboarding_note": "Download the companion mobile app using the following options",
++  "mobile_app_download_onboarding_note": "Back up this phone with the Kimono app.",
+   "model": "Model",
+   "modify_date": "Modify Date",
+   "month": "Month",
+diff --git a/server/src/services/api.service.ts b/server/src/services/api.service.ts
+index 992c2f1..6b63b69 100644
+--- a/server/src/services/api.service.ts
++++ b/server/src/services/api.service.ts
+@@ -20,6 +20,13 @@ const isAutoLaunchOptOut = (query: Request['query']) =>
+   'code' in query ||
+   'error' in query;
+ 
++// Kimono: the phone app comes from Kimono, so "Get the app" anywhere in the web app goes to Kimono's own page.
++const GET_APP_PATH = '/get-app';
++const getAppUrl = () => {
++  const url = process.env.KIMONO_GET_APP_URL ?? '';
++  return /^https?:\/\//.test(url) ? url : null;
++};
++
+ export const render = (index: string, meta: OpenGraphTags) => {
+   const [title, description, imageUrl] = [meta.title, meta.description, meta.imageUrl].map((item) =>
+     item ? escape(item) : '',
+@@ -107,6 +114,12 @@ export class ApiService {
+         );
+       }
+ 
++      const kimonoGetApp = request.path === GET_APP_PATH ? getAppUrl() : null;
++      if (kimonoGetApp) {
++        const query = request.url.indexOf('?');
++        return res.header('Cache-Control', 'no-store').redirect(302, kimonoGetApp + (query === -1 ? '' : request.url.slice(query)));
++      }
++
+       if (await this.redirectToOAuth(request, res)) {
+         return;
+       }
+diff --git a/web/src/routes/(user)/utilities/UtilitiesMenu.svelte b/web/src/routes/(user)/utilities/UtilitiesMenu.svelte
+index af44a3c..a0ef8ab 100644
+--- a/web/src/routes/(user)/utilities/UtilitiesMenu.svelte
++++ b/web/src/routes/(user)/utilities/UtilitiesMenu.svelte
+@@ -1,14 +1,11 @@
+ <script lang="ts">
+-  import AppDownloadModal from '$lib/modals/AppDownloadModal.svelte';
+-  import ObtainiumConfigModal from '$lib/modals/ObtainiumConfigModal.svelte';
+   import { Route } from '$lib/route';
+-  import { Icon, modalManager, Text } from '@immich/ui';
++  import { Icon, Text } from '@immich/ui';
+   import {
+     mdiCellphoneArrowDownVariant,
+     mdiContentDuplicate,
+     mdiCrosshairsGps,
+     mdiImageSizeSelectLarge,
+-    mdiLinkEdit,
+     mdiStateMachine,
+   } from '@mdi/js';
+   import { t } from 'svelte-i18n';
+@@ -35,24 +32,15 @@
+ <div class="rounded-3xl border border-gray-300 pt-1 pb-6 dark:border-immich-dark-gray dark:text-white">
+   <Text size="tiny" color="muted" fontWeight="medium" class="p-4">{$t('download')}</Text>
+ 
+-  <button
+-    type="button"
+-    onclick={() => modalManager.show(ObtainiumConfigModal, {})}
+-    class="flex w-full items-center gap-4 p-4 hover:bg-gray-100 dark:hover:bg-immich-dark-gray"
+-  >
+-    <span>
+-      <Icon icon={mdiLinkEdit} class="text-immich-primary dark:text-immich-dark-primary" size="24" />
+-    </span>
+-    {$t('obtainium_configurator')}
+-  </button>
+-  <button
+-    type="button"
+-    onclick={() => modalManager.show(AppDownloadModal, {})}
++  <!-- Kimono: the phone app comes from Kimono, so this leaves for Kimono's own page (the server redirects /get-app). -->
++  <a
++    href="/get-app"
++    data-sveltekit-reload
+     class="flex w-full items-center gap-4 p-4 hover:bg-gray-100 dark:hover:bg-immich-dark-gray"
+   >
+     <span>
+       <Icon icon={mdiCellphoneArrowDownVariant} class="text-immich-primary dark:text-immich-dark-primary" size="24" />
+     </span>
+     {$t('app_download_links')}
+-  </button>
++  </a>
+ </div>
+diff --git a/web/src/routes/auth/onboarding/OnboardingMobileApp.svelte b/web/src/routes/auth/onboarding/OnboardingMobileApp.svelte
+index 27e24d1..4797586 100644
+--- a/web/src/routes/auth/onboarding/OnboardingMobileApp.svelte
++++ b/web/src/routes/auth/onboarding/OnboardingMobileApp.svelte
+@@ -1,31 +1,19 @@
+ <script lang="ts">
+-  import AppDownloadModal from '$lib/modals/AppDownloadModal.svelte';
+-  import ObtainiumConfigModal from '$lib/modals/ObtainiumConfigModal.svelte';
+-  import { Button, HStack, modalManager } from '@immich/ui';
+-  import { mdiCellphoneArrowDownVariant, mdiLinkEdit } from '@mdi/js';
++  import { Button } from '@immich/ui';
++  import { mdiCellphoneArrowDownVariant } from '@mdi/js';
+   import { t } from 'svelte-i18n';
+ </script>
+ 
++<!-- Kimono: the phone app comes from Kimono, so this leaves for Kimono's own page (the server redirects /get-app). -->
+ <p>{$t('mobile_app_download_onboarding_note')}</p>
+ 
+-<HStack>
+-  <Button
+-    size="medium"
+-    shape="semi-round"
+-    fullWidth
+-    onclick={() => modalManager.show(AppDownloadModal, {})}
+-    leadingIcon={mdiCellphoneArrowDownVariant}
+-  >
+-    {$t('app_stores')}
+-  </Button>
+-
+-  <Button
+-    size="medium"
+-    shape="semi-round"
+-    fullWidth
+-    onclick={() => modalManager.show(ObtainiumConfigModal, {})}
+-    leadingIcon={mdiLinkEdit}
+-  >
+-    {$t('obtainium_configurator')}
+-  </Button>
+-</HStack>
++<Button
++  size="medium"
++  shape="semi-round"
++  fullWidth
++  href="/get-app"
++  data-sveltekit-reload
++  leadingIcon={mdiCellphoneArrowDownVariant}
++>
++  {$t('app_download_links')}
++</Button>
