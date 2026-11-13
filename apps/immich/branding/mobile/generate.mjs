@@ -1,12 +1,13 @@
-// Draws Kimono Photos' phone artwork from Kimono's own bloom code, so the app
-// icon is the same flower the Portal shows on the Photos tile. Run it when
-// Kimono's bloom, the Photos accent or this file changes, and commit files/:
+// Draws Kimono Photos' phone artwork. The bloom is bloom.png beside this file when
+// it's there: the Photos bloom as the Kimono phone app draws it (its InkBloom, on a
+// clear ground, square, 1206 px). Without it, the Portal's bloom code draws one.
+// Run it when the bloom, the Photos accent or this file changes, and commit files/:
 //
 //   node apps/immich/branding/mobile/generate.mjs ~/dev/kimono
 //
-// Needs a Kimono checkout with dependencies installed (for TypeScript and sharp).
+// Needs a Kimono checkout with dependencies installed (TypeScript in packages/ui, sharp in apps/portal).
 import { createRequire } from "node:module";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -15,7 +16,7 @@ const kimono = process.argv[2];
 if (!kimono) throw new Error("usage: node generate.mjs <kimono checkout>");
 const here = dirname(fileURLToPath(import.meta.url));
 const out = join(here, "files", "mobile");
-const require = createRequire(join(kimono, "apps/mobile/package.json"));
+const require = createRequire(join(kimono, "apps/portal/package.json"));
 const sharp = require("sharp");
 const ts = createRequire(join(kimono, "packages/ui/package.json"))("typescript");
 
@@ -38,7 +39,11 @@ rmSync(work, { recursive: true });
 
 const bloom = bloomSvg({ id: app.id, accent: app.accent }, { glyph: app.glyph, standalone: true, unique: app.id });
 const ground = "#f7f1e8", night = "#1c1618", plum = "#34262a", paper = "#fffaf2";
-const inner = bloom.replace(/^<svg[^>]*>/, "").replace(/<\/svg>$/, "");
+/* The phone app's own drawing of the bloom, when there is one, fills the same 100×100 box. */
+const drawn = join(here, "bloom.png");
+const inner = existsSync(drawn)
+  ? `<image width="100" height="100" href="data:image/png;base64,${readFileSync(drawn).toString("base64")}"/>`
+  : bloom.replace(/^<svg[^>]*>/, "").replace(/<\/svg>$/, "");
 
 /* The bloom drawn at `share` of a size×size canvas, on `background` or clear. */
 const bloomAt = (size, share, background) => {
