@@ -5,7 +5,8 @@
 #   VERSION          3.1.0-kimono.1         (image tag, release name)
 #   BUILD_NAME       3.1.0                  (what phones show)
 #   BUILD_NUMBER     305701                 (upstream build × 100 + revision: always increases)
-#   FLUTTER_VERSION  3.44.8                 (upstream mobile/mise.toml)
+#   FLUTTER_VERSION  3.44.8                 (upstream mobile/mise.toml; only for Flutter apps)
+# Apps with no pubspec take the upstream build from the tag (v1.2.3 → 10203).
 source "$(dirname "$0")/lib.sh"
 load_app "$1"
 ref="${GITHUB_REF_NAME:-}"
@@ -19,10 +20,16 @@ mise="$(git -C "$UPSTREAM" show "$PIN:mobile/mise.toml" 2>/dev/null || true)"
 flutter="$(sed -n 's/^"aqua:flutter\/flutter" *= *"\(.*\)"/\1/p' <<<"$mise")"
 [[ -n "$flutter" ]] || flutter="$(awk '/^\[tools\."aqua:flutter\/flutter"\]/{t=1;next} /^\[/{t=0} t&&/^version *=/{gsub(/.*= *"|".*/,"");print;exit}' <<<"$mise")"
 [[ -n "$flutter" ]] || flutter="$(sed -n 's/^  flutter: *\([0-9.]*\) *$/\1/p' <<<"$pubspec" | head -1)"
-[[ -n "$flutter" ]] || { echo "versions.sh: can't find upstream's Flutter version" >&2; exit 1; }
+if [[ -n "$pubspec" ]]; then
+  [[ -n "$flutter" ]] || { echo "versions.sh: can't find upstream's Flutter version" >&2; exit 1; }
+fi
+# Apps without a pubspec build number count from the tag instead: v1.2.3 → 10203.
+if [[ -z "$upstream_build" && "$name" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+  upstream_build=$(( BASH_REMATCH[1] * 10000 + BASH_REMATCH[2] * 100 + BASH_REMATCH[3] ))
+fi
 echo "UPSTREAM_TAG=$UPSTREAM_TAG"
 echo "KIMONO_REVISION=$rev"
 echo "VERSION=$name-kimono.$rev"
 echo "BUILD_NAME=$name"
 echo "BUILD_NUMBER=$(( ${upstream_build:-0} * 100 + rev ))"
-echo "FLUTTER_VERSION=$flutter"
+[[ -z "$flutter" ]] || echo "FLUTTER_VERSION=$flutter"

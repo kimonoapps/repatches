@@ -2,3 +2,6 @@
 	path = upstream/immich
 	url = https://github.com/immich-app/immich.git
 	shallow = true
+[submodule "upstream/mawaqit-bar"]
+	path = upstream/mawaqit-bar
+	url = https://github.com/akramboussanni/mawaqit-bar.git

@@ -5,7 +5,7 @@ name: Repair a broken main
 # on a branch and open a PR. One attempt per failing commit.
 on:
   workflow_run:
-    workflows: ["Kimono Photos (Immich)"]
+    workflows: ["Kimono Photos (Immich)", "Kimono Prayer (mawaqit-bar)"]
     types: [completed]
     branches: [main]
   workflow_dispatch:
@@ -22,8 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 180
     env:
-      APP: ${{ inputs.app || 'immich' }}
-      BRANCH: repair/${{ inputs.app || 'immich' }}-${{ github.event.workflow_run.head_sha || github.sha }}
+      APP: ${{ inputs.app || (github.event.workflow_run.name == 'Kimono Prayer (mawaqit-bar)' && 'mawaqit-bar') || 'immich' }}
+      BRANCH: repair/${{ inputs.app || (github.event.workflow_run.name == 'Kimono Prayer (mawaqit-bar)' && 'mawaqit-bar') || 'immich' }}-${{ github.event.workflow_run.head_sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -38,7 +38,7 @@ jobs:
         uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: "21" }
       - if: steps.seen.outputs.skip != 'true'
-        run: scripts/versions.sh "$APP" | grep FLUTTER_VERSION >> "$GITHUB_ENV"
+        run: scripts/versions.sh "$APP" | { grep FLUTTER_VERSION || true; } >> "$GITHUB_ENV"
       - if: steps.seen.outputs.skip != 'true' && env.FLUTTER_VERSION != ''
         uses: subosito/flutter-action@v2
         with: { flutter-version: "${{ env.FLUTTER_VERSION }}", channel: stable, cache: true }

@@ -83,7 +83,7 @@ jobs:
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: "21" }
       - name: Flutter version upstream pins
-        run: scripts/versions.sh "${{ matrix.app }}" | grep FLUTTER_VERSION >> "$GITHUB_ENV"
+        run: scripts/versions.sh "${{ matrix.app }}" | { grep FLUTTER_VERSION || true; } >> "$GITHUB_ENV"
       - if: env.FLUTTER_VERSION != ''
         uses: subosito/flutter-action@v2
         with: { flutter-version: "${{ env.FLUTTER_VERSION }}", channel: stable, cache: true }
@@ -123,6 +123,6 @@ jobs:
           else
             state="The patches broke on $TAG and the automatic repair **did not get the checks passing**. Needs a person."; draft="--draft"
           fi
-          body=$(printf '%s\n\nUpstream release: https://github.com/%s/releases/tag/%s\n\nThis PR runs the full builds (server image, APK, iPhone). Releasing after merge: tag `%s/%s-kimono.1`.\n\n<details><summary>Last check output</summary>\n\n```\n%s\n```\n</details>\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)' \
+          body=$(printf '%s\n\nUpstream release: https://github.com/%s/releases/tag/%s\n\nThis PR runs the full builds. Releasing after merge: tag `%s/%s-kimono.1`.\n\n<details><summary>Last check output</summary>\n\n```\n%s\n```\n</details>\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)' \
             "$state" "$(git config -f .gitmodules "submodule.upstream/$APP.url" | sed -E 's#https://github.com/##; s#\.git$##')" "$TAG" "$APP" "$TAG" "$tail_log")
           gh pr create $draft --base main --head "$BRANCH" --title "Follow $APP $TAG" --body "$body"
