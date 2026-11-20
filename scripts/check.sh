@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # check.sh <app> [--full] — apply every patch part from scratch and run the app's checks.
 # Default is the quick gate (static checks, analysis, unit tests); --full adds the
-# slow ones (APK build, server image build and its smoke test). Exit 0 = all good.
+# slow ones (APK build, server image build and its smoke test; the Mac app and
+# GNOME extension zip for mawaqit-bar). Exit 0 = all good.
 source "$(dirname "$0")/lib.sh"
 load_app "$1"
 FULL=0; [[ "${2:-}" == "--full" ]] && FULL=1
@@ -17,6 +18,8 @@ mkdir -p "$ROOT/work"
     if (( FULL )); then
       case "$part" in
         mobile) args+=(--apk) ;;
+        macos) args+=(--app) ;;
+        gnome) args+=(--zip) ;;
         web) "$APP_DIR/build/web-image.sh" "repatches/$APP-check:local"; args+=(--image "repatches/$APP-check:local") ;;
       esac
     fi

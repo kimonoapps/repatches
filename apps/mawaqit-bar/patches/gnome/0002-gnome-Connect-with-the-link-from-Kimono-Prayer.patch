@@ -1,0 +1,171 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: akramboussanni <92455979+akramboussanni@users.noreply.github.com>
+Date: Thu, 19 Nov 2026 17:20:17 -0800
+Subject: [PATCH] gnome: Connect with the link from Kimono Prayer
+
+Why: the extension reads everything through a person's own Kimono Prayer link
+(https://<kimono>/api/v1/prayer/feed/<token>), which stands in for signing in.
+Until it has one it can't do anything, so it asks for it.
+
+What must survive upstream changes:
+- kimono.js (no imports, so node can test it) has kimonoLink(): it accepts the
+  bare link or mawaqit-kimono://connect?link=<urlencoded link>, only http(s)
+  with the path /api/v1/prayer/feed/<token>, and drops any query.
+- The search entry is where the link is pasted: not connected, its hint says
+  "Paste your Kimono Prayer link", the location button and calculated menu are
+  hidden, and the status asks for the link. Submitting anything else repeats it.
+- The link is state.link in ~/.config/kimono-prayer/state.json (written with
+  Gio.FileCreateFlags.PRIVATE, as upstream saves its state).
+- Connecting replaces any saved place and calendar (keeping the notification
+  and icon-only switches) and loads at once. "Disconnect from Kimono", shown
+  while connected, forgets the link and the times.
+- tests/kimono.mjs covers the parser (node tests/kimono.mjs).
+
+diff --git a/gnome/mawaqit@akramb.com/extension.js b/gnome/mawaqit@akramb.com/extension.js
+index 7037fdc..00350d0 100644
+--- a/gnome/mawaqit@akramb.com/extension.js
++++ b/gnome/mawaqit@akramb.com/extension.js
+@@ -11,6 +11,7 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
+ import {parseCalendar, parseCalculatedCalendar, schedule, mosqueSlug} from './calendar.js';
+ import {dueNotifications} from './notifications.js';
+ import {remaining, prayerDetail, panelTitle, displayPrayers, nextSummary} from './presentation.js';
++import {CONNECT_PROMPT, kimonoLink} from './kimono.js';
+ 
+ export default class MawaqitExtension extends Extension {
+     enable() {
+@@ -118,7 +119,10 @@ export default class MawaqitExtension extends Extension {
+         this._refreshAction = this._action('Refresh prayer times', () => this._refreshCurrent());
+         this._refreshAction.insert_child_at_index(this._icon('view-refresh-symbolic'), 1);
+         this._refreshAction.add_style_class_name('mawaqit-refresh');
+-        this._status = this._text('Search for a Mawaqit mosque, or use calculated times from the menu below.');
++        this._disconnectAction = this._action('Disconnect from Kimono', () => this._disconnect());
++        this._disconnectAction.insert_child_at_index(this._icon('system-log-out-symbolic'), 1);
++        this._disconnectAction.add_style_class_name('mawaqit-refresh');
++        this._status = this._text(this._connected() ? 'Search for a Mawaqit mosque, or use calculated times from the menu below.' : CONNECT_PROMPT);
+         this._status.label.connect('notify::text', () => {
+             this._status.actor.visible = Boolean(this._status.label.text);
+         });
+@@ -137,7 +141,7 @@ export default class MawaqitExtension extends Extension {
+         this._updateLocationAvailability();
+         this._button.menu.connect('open-state-changed', (_menu, open) => {
+             if (open) this._render();
+-            if (open && !this._hasLocation()) this._searchEntry.grab_key_focus();
++            if (open && (!this._connected() || !this._hasLocation())) this._searchEntry.grab_key_focus();
+         });
+         Main.panel.addToStatusArea(this.uuid, this._button);
+         this._render();
+@@ -235,6 +239,15 @@ export default class MawaqitExtension extends Extension {
+         this._results.removeAll();
+         try {
+             const query = this._searchEntry.get_text().trim();
++            const link = kimonoLink(query);
++            if (link) {
++                this._connect(link);
++                return;
++            }
++            if (!this._connected()) {
++                this._status.label.text = CONNECT_PROMPT;
++                return;
++            }
+             if (/^https?:\/\//i.test(query)) {
+                 const slug = mosqueSlug(query);
+                 this._choose(slug, slug);
+@@ -383,6 +396,40 @@ export default class MawaqitExtension extends Extension {
+         this._error(new Error('Could not access your location. Enable Location Services for GNOME Shell in Settings → Privacy, or enter “City, Country” below.'));
+     }
+ 
++    _connected() {
++        return Boolean(this._state.link);
++    }
++
++    // A Kimono Prayer link replaces whatever was saved, keeping the switches, and loads at once.
++    _connect(link) {
++        this._generation++;
++        this._searchGeneration++;
++        this._state = {notificationsEnabled: this._state.notificationsEnabled !== false,
++            iconOnlyMenuBar: this._state.iconOnlyMenuBar === true, link};
++        this._data = null;
++        this._notificationSeen.clear();
++        this._lastNotificationCheck = Math.floor(Date.now() / 1000);
++        this._results.removeAll();
++        this._searchEntry.set_text('');
++        this._status.label.text = '';
++        this._save();
++        this._render();
++        this._refreshCurrent();
++    }
++
++    _disconnect() {
++        this._generation++;
++        this._searchGeneration++;
++        this._state = {notificationsEnabled: this._state.notificationsEnabled !== false,
++            iconOnlyMenuBar: this._state.iconOnlyMenuBar === true};
++        this._data = null;
++        this._results.removeAll();
++        this._searchEntry.set_text('');
++        this._status.label.text = CONNECT_PROMPT;
++        this._save();
++        this._render();
++    }
++
+     _hasLocation() {
+         return Boolean(this._state.slug || this._state.calculationQuery);
+     }
+@@ -480,6 +527,12 @@ export default class MawaqitExtension extends Extension {
+     }
+ 
+     _render() {
++        const connected = this._connected();
++        this._searchEntry.hint_text = connected ? 'Mosque, city, coordinates or URL' : 'Paste your Kimono Prayer link';
++        this._locationButton.visible = connected;
++        this._calculatedMenu.actor.visible = connected;
++        this._disconnectAction.actor.visible = connected;
++        if (!connected) this._calculatedSuggestion.actor.visible = false;
+         const active = this._hasLocation();
+         for (const item of [this._prayerSeparator, this._title, this._subtitle, this._source, this._upcomingSummary, this._todayHeading, this._rows, this._nightHeading, this._nightRows, this._notificationSwitch, this._refreshAction])
+             item.actor.visible = active;
+diff --git a/gnome/mawaqit@akramb.com/kimono.js b/gnome/mawaqit@akramb.com/kimono.js
+new file mode 100644
+index 0000000..d7b8767
+--- /dev/null
++++ b/gnome/mawaqit@akramb.com/kimono.js
+@@ -0,0 +1,21 @@
++// The personal link Kimono Prayer hands out (https://<kimono>/api/v1/prayer/feed/<token>), pasted
++// as is or wrapped in mawaqit-kimono://connect?link=<link>. It stands in for signing in.
++// No imports, so the tests run under plain node as well as gjs.
++
++export const CONNECT_PROMPT = 'Paste your link from Kimono Prayer and press Enter.';
++
++const FEED = /^(https?):\/\/([^/?#\s]+)(\/api\/v1\/prayer\/feed\/[A-Za-z0-9_-]+)\/?(?:[?#]\S*)?$/i;
++const CONNECT = /^mawaqit-kimono:\/\/connect\/?\?(\S*)$/i;
++
++/** The feed link in `text`, normalised, or null. */
++export function kimonoLink(text) {
++    let value = String(text ?? '').trim();
++    const connect = CONNECT.exec(value);
++    if (connect) {
++        const param = connect[1].split('&').find(part => part.startsWith('link='));
++        if (!param) return null;
++        try { value = decodeURIComponent(param.slice(5).replace(/\+/g, ' ')).trim(); } catch (_) { return null; }
++    }
++    const match = FEED.exec(value);
++    return match ? `${match[1].toLowerCase()}://${match[2]}${match[3]}` : null;
++}
+diff --git a/gnome/mawaqit@akramb.com/tests/kimono.mjs b/gnome/mawaqit@akramb.com/tests/kimono.mjs
+new file mode 100644
+index 0000000..c6b4247
+--- /dev/null
++++ b/gnome/mawaqit@akramb.com/tests/kimono.mjs
+@@ -0,0 +1,12 @@
++import assert from 'node:assert/strict';
++import {kimonoLink} from '../kimono.js';
++
++const link = 'https://kimono.example/api/v1/prayer/feed/abc_DEF-123';
++assert.equal(kimonoLink(`  ${link}\n`), link, 'A pasted link');
++assert.equal(kimonoLink(`mawaqit-kimono://connect?link=${encodeURIComponent(link)}`), link, 'The connect address');
++assert.equal(kimonoLink(`${link}?q=paris`), link, 'A query is dropped');
++assert.equal(kimonoLink('https://kimono.example/prayer'), null, 'Another Kimono page');
++assert.equal(kimonoLink('ftp://kimono.example/api/v1/prayer/feed/abc'), null, 'Another scheme');
++assert.equal(kimonoLink(`mawaqit-kimono://other?link=${encodeURIComponent(link)}`), null, 'Another action');
++assert.equal(kimonoLink('Paris'), null, 'Words');
++console.log('Kimono tests passed');

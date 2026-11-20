@@ -1,0 +1,244 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: akramboussanni <92455979+akramboussanni@users.noreply.github.com>
+Date: Thu, 19 Nov 2026 17:15:08 -0800
+Subject: [PATCH] macos: Give the menu bar app the Kimono Prayer identity
+
+Why: Kimono Prayer's menu bar app has to install and run beside the original
+Mawaqit app without the two sharing anything, and people should see Kimono's
+name, not Mawaqit's.
+
+What must survive upstream changes:
+- Info.plist: CFBundleIdentifier app.kimono.prayer.menubar, CFBundleName and
+  CFBundleDisplayName "Kimono Prayer", location prompts name Kimono Prayer.
+- Saved state lives in Application Support/Kimono Prayer/state.json, never
+  upstream's Mawaqit folder (UserDefaults and Login Items follow the bundle id).
+- The status item's autosave name, identifier and tooltip, the right-click and
+  main menus (Open, About, Quit) and every on-screen message say Kimono Prayer.
+- The Notification Settings deep link opens app.kimono.prayer.menubar's page.
+- build-app.sh, release.sh and dmg-settings.py produce dist/Kimono Prayer.app,
+  .zip and .dmg (volume "Kimono Prayer"). The executable and Swift target keep
+  upstream's MawaqitMac name: it's internal, and renaming it only makes repairs
+  harder.
+
+diff --git a/macos/Info.plist b/macos/Info.plist
+index a37fa24..beceb22 100644
+--- a/macos/Info.plist
++++ b/macos/Info.plist
+@@ -3,19 +3,19 @@
+ <plist version="1.0">
+ <dict>
+     <key>CFBundleDevelopmentRegion</key><string>en</string>
+-    <key>CFBundleDisplayName</key><string>Mawaqit</string>
++    <key>CFBundleDisplayName</key><string>Kimono Prayer</string>
+     <key>CFBundleExecutable</key><string>MawaqitMac</string>
+-    <key>CFBundleIdentifier</key><string>com.akramb.mawaqit</string>
++    <key>CFBundleIdentifier</key><string>app.kimono.prayer.menubar</string>
+     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+-    <key>CFBundleName</key><string>Mawaqit</string>
++    <key>CFBundleName</key><string>Kimono Prayer</string>
+     <key>CFBundleIconFile</key><string>Mawaqit.icns</string>
+     <key>CFBundlePackageType</key><string>APPL</string>
+     <key>CFBundleShortVersionString</key><string>1.0</string>
+     <key>CFBundleVersion</key><string>1</string>
+     <key>LSMinimumSystemVersion</key><string>13.0</string>
+     <key>LSUIElement</key><true/>
+-    <key>NSLocationUsageDescription</key><string>Mawaqit uses your location when you press the location button to offer local prayer times.</string>
+-    <key>NSLocationWhenInUseUsageDescription</key><string>Mawaqit uses your location when you press the location button to offer local prayer times.</string>
++    <key>NSLocationUsageDescription</key><string>Kimono Prayer uses your location when you press the location button to find mosques and prayer times near you.</string>
++    <key>NSLocationWhenInUseUsageDescription</key><string>Kimono Prayer uses your location when you press the location button to find mosques and prayer times near you.</string>
+     <key>NSHumanReadableCopyright</key><string>Copyright © 2026 Akram Boussanni</string>
+ </dict>
+ </plist>
+diff --git a/macos/Sources/MawaqitMac/Location.swift b/macos/Sources/MawaqitMac/Location.swift
+index 9c5bbc9..788fbb6 100644
+--- a/macos/Sources/MawaqitMac/Location.swift
++++ b/macos/Sources/MawaqitMac/Location.swift
+@@ -28,7 +28,7 @@ final class LocationLookup: NSObject, @preconcurrency CLLocationManagerDelegate
+                 let reason: String? = if !enabled {
+                     "Location Services is off. Turn it on in System Settings → Privacy & Security, or enter a city."
+                 } else if status == .denied || status == .restricted {
+-                    "Mawaqit can’t use your location. Allow it in System Settings → Privacy & Security → Location Services, or enter a city."
++                    "Kimono Prayer can’t use your location. Allow it in System Settings → Privacy & Security → Location Services, or enter a city."
+                 } else { nil }
+                 self?.onAvailabilityChange?(reason)
+             }
+@@ -72,7 +72,7 @@ final class LocationLookup: NSObject, @preconcurrency CLLocationManagerDelegate
+     }
+ 
+     private func denied() {
+-        finish(.failure(MawaqitError.message("Allow Mawaqit in System Settings → Privacy & Security → Location Services, or enter a city.")))
++        finish(.failure(MawaqitError.message("Allow Kimono Prayer in System Settings → Privacy & Security → Location Services, or enter a city.")))
+     }
+ 
+     private func finish(_ result: Result<CLLocationCoordinate2D, Error>) {
+diff --git a/macos/Sources/MawaqitMac/MawaqitMac.swift b/macos/Sources/MawaqitMac/MawaqitMac.swift
+index 5e33657..8e93bd8 100644
+--- a/macos/Sources/MawaqitMac/MawaqitMac.swift
++++ b/macos/Sources/MawaqitMac/MawaqitMac.swift
+@@ -47,13 +47,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
+         NSApp.setActivationPolicy(.accessory)
+         installMainMenu()
+         let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+-        statusItem.autosaveName = "Mawaqit"
++        statusItem.autosaveName = "KimonoPrayer"
+         statusItem.isVisible = true
+         self.statusItem = statusItem
+         if let button = statusItem.button {
+-            button.identifier = NSUserInterfaceItemIdentifier("Mawaqit")
+-            button.setAccessibilityIdentifier("Mawaqit")
+-            button.image = NSImage(systemSymbolName: "moon.stars.fill", accessibilityDescription: "Mawaqit Prayer Times")
++            button.identifier = NSUserInterfaceItemIdentifier("KimonoPrayer")
++            button.setAccessibilityIdentifier("KimonoPrayer")
++            button.image = NSImage(systemSymbolName: "moon.stars.fill", accessibilityDescription: "Kimono Prayer")
+             button.image?.isTemplate = true
+             button.imagePosition = .imageLeading
+             button.target = self
+@@ -70,7 +70,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
+             statusItem.isVisible = true
+             statusItem.length = iconOnly ? NSStatusItem.squareLength : NSStatusItem.variableLength
+             statusItem.button?.title = iconOnly || title.isEmpty ? "" : " \(title)"
+-            statusItem.button?.toolTip = title.isEmpty ? "Mawaqit Prayer Times" : title
++            statusItem.button?.toolTip = title.isEmpty ? "Kimono Prayer" : title
+         }.store(in: &cancellables)
+         timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+             Task { @MainActor in self?.store.tick() }
+@@ -82,10 +82,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
+         guard let statusItem, let button = statusItem.button else { return }
+         if NSApp.currentEvent?.type == .rightMouseUp {
+             let menu = NSMenu()
+-            addCommand("Open Mawaqit", action: #selector(showMainWindow), to: menu)
++            addCommand("Open Kimono Prayer", action: #selector(showMainWindow), to: menu)
+             addCommand("Settings…", action: #selector(showSettings), key: ",", to: menu)
+             menu.addItem(.separator())
+-            addCommand("Quit Mawaqit", action: #selector(quit), key: "q", to: menu)
++            addCommand("Quit Kimono Prayer", action: #selector(quit), key: "q", to: menu)
+             statusItem.menu = menu
+             button.performClick(nil)
+             statusItem.menu = nil
+@@ -104,13 +104,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
+ 
+     private func installMainMenu() {
+         let main = NSMenu()
+-        let appItem = main.addItem(withTitle: "Mawaqit", action: nil, keyEquivalent: "")
+-        let appMenu = NSMenu(title: "Mawaqit")
++        let appItem = main.addItem(withTitle: "Kimono Prayer", action: nil, keyEquivalent: "")
++        let appMenu = NSMenu(title: "Kimono Prayer")
+         appItem.submenu = appMenu
+-        addCommand("About Mawaqit", action: #selector(showAbout), to: appMenu)
++        addCommand("About Kimono Prayer", action: #selector(showAbout), to: appMenu)
+         addCommand("Settings…", action: #selector(showSettings), key: ",", to: appMenu)
+         appMenu.addItem(.separator())
+-        addCommand("Quit Mawaqit", action: #selector(quit), key: "q", to: appMenu)
++        addCommand("Quit Kimono Prayer", action: #selector(quit), key: "q", to: appMenu)
+         let editItem = main.addItem(withTitle: "Edit", action: nil, keyEquivalent: "")
+         let edit = NSMenu(title: "Edit")
+         editItem.submenu = edit
+diff --git a/macos/Sources/MawaqitMac/MenuView.swift b/macos/Sources/MawaqitMac/MenuView.swift
+index 8df640e..a649784 100644
+--- a/macos/Sources/MawaqitMac/MenuView.swift
++++ b/macos/Sources/MawaqitMac/MenuView.swift
+@@ -297,11 +297,11 @@ struct SettingsPage: View {
+         section("Prayer reminders") {
+             toggle("Notifications", isOn: Binding(get: { store.state.notificationsEnabled }, set: store.setNotifications))
+             if store.state.notificationsEnabled && store.notificationsBlocked {
+-                Label("Notifications are turned off for Mawaqit in System Settings.", systemImage: "bell.slash")
++                Label("Notifications are turned off for Kimono Prayer in System Settings.", systemImage: "bell.slash")
+                     .font(.caption).foregroundStyle(.orange)
+                     .fixedSize(horizontal: false, vertical: true)
+                 Button("Open Notification Settings") {
+-                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=com.akramb.mawaqit")!)
++                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=app.kimono.prayer.menubar")!)
+                 }
+             } else {
+                 Text("Alerts at each prayer and the last third of the night.")
+diff --git a/macos/Sources/MawaqitMac/Store.swift b/macos/Sources/MawaqitMac/Store.swift
+index a62d2fa..07de939 100644
+--- a/macos/Sources/MawaqitMac/Store.swift
++++ b/macos/Sources/MawaqitMac/Store.swift
+@@ -29,7 +29,7 @@ final class MawaqitStore: ObservableObject {
+ 
+     private var stateURL: URL {
+         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+-        return base.appendingPathComponent("Mawaqit", isDirectory: true).appendingPathComponent("state.json")
++        return base.appendingPathComponent("Kimono Prayer", isDirectory: true).appendingPathComponent("state.json")
+     }
+ 
+     var hasLocation: Bool { state.slug != nil || state.calculationQuery != nil }
+@@ -153,7 +153,7 @@ final class MawaqitStore: ObservableObject {
+             }
+             launchAtLogin = SMAppService.mainApp.status == .enabled
+             if enabled && !launchAtLogin {
+-                status = "Approve Mawaqit under System Settings → General → Login Items."
++                status = "Approve Kimono Prayer under System Settings → General → Login Items."
+             }
+         } catch {
+             launchAtLogin = SMAppService.mainApp.status == .enabled
+diff --git a/macos/build-app.sh b/macos/build-app.sh
+index cd48db5..ee5b413 100755
+--- a/macos/build-app.sh
++++ b/macos/build-app.sh
+@@ -2,8 +2,8 @@
+ set -eu
+ 
+ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+-APP_DIR="$SCRIPT_DIR/dist/Mawaqit.app"
+-ZIP_PATH="$SCRIPT_DIR/dist/Mawaqit.zip"
++APP_DIR="$SCRIPT_DIR/dist/Kimono Prayer.app"
++ZIP_PATH="$SCRIPT_DIR/dist/Kimono Prayer.zip"
+ SWIFT_COMMAND=$(command -v swift)
+ 
+ # Swiftly's shim can fall back to Apple's bundled compiler when invoked from
+diff --git a/macos/dmg-settings.py b/macos/dmg-settings.py
+index 472c2d8..7f8f176 100644
+--- a/macos/dmg-settings.py
++++ b/macos/dmg-settings.py
+@@ -1,12 +1,12 @@
+-# dmgbuild layout for Mawaqit.dmg; release.sh passes app, icon and background via -D.
++# dmgbuild layout for Kimono Prayer.dmg; release.sh passes app, icon and background via -D.
+ app = defines["app"]
+ 
+ format = "UDZO"
+-volume_name = "Mawaqit"
++volume_name = "Kimono Prayer"
+ icon = defines["icon"]
+ files = [app]
+ symlinks = {"Applications": "/Applications"}
+-hide_extensions = ["Mawaqit.app"]
++hide_extensions = ["Kimono Prayer.app"]
+ 
+ background = defines["background"]
+ window_rect = ((200, 140), (640, 400))
+@@ -22,4 +22,4 @@ arrange_by = None
+ icon_size = 128
+ text_size = 14
+ # Centres line up with the arrow drawn by Assets/make-dmg-background.swift.
+-icon_locations = {"Mawaqit.app": (170, 200), "Applications": (470, 200)}
++icon_locations = {"Kimono Prayer.app": (170, 200), "Applications": (470, 200)}
+diff --git a/macos/release.sh b/macos/release.sh
+index df37518..25d3b00 100755
+--- a/macos/release.sh
++++ b/macos/release.sh
+@@ -2,10 +2,10 @@
+ set -eu
+ 
+ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+-APP_DIR="$SCRIPT_DIR/dist/Mawaqit.app"
+-ZIP_PATH="$SCRIPT_DIR/dist/Mawaqit.zip"
+-DMG_PATH="$SCRIPT_DIR/dist/Mawaqit.dmg"
+-NOTARY_PROFILE_NAME="${NOTARY_PROFILE:-mawaqit-release}"
++APP_DIR="$SCRIPT_DIR/dist/Kimono Prayer.app"
++ZIP_PATH="$SCRIPT_DIR/dist/Kimono Prayer.zip"
++DMG_PATH="$SCRIPT_DIR/dist/Kimono Prayer.dmg"
++NOTARY_PROFILE_NAME="${NOTARY_PROFILE:-kimono-prayer-release}"
+ 
+ # CI passes Apple credentials through the environment; locally a Keychain profile is used.
+ notarize() {
+@@ -47,7 +47,7 @@ fi
+ rm -f "$DMG_PATH"
+ "$DMGBUILD" -s "$SCRIPT_DIR/dmg-settings.py" -D app="$APP_DIR" \
+     -D icon="$SCRIPT_DIR/Assets/Mawaqit.icns" \
+-    -D background="$SCRIPT_DIR/Assets/dmg-background.tiff" Mawaqit "$DMG_PATH"
++    -D background="$SCRIPT_DIR/Assets/dmg-background.tiff" "Kimono Prayer" "$DMG_PATH"
+ codesign --force --timestamp --sign "$SIGN_IDENTITY" "$DMG_PATH"
+ notarize "$DMG_PATH"
+ xcrun stapler staple "$DMG_PATH"

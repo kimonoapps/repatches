@@ -5,3 +5,4 @@
 [submodule "upstream/mawaqit-bar"]
 	path = upstream/mawaqit-bar
 	url = https://github.com/akramboussanni/mawaqit-bar.git
+	shallow = true

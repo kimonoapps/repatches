@@ -1,0 +1,73 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: akramboussanni <92455979+akramboussanni@users.noreply.github.com>
+Date: Thu, 19 Nov 2026 17:19:43 -0800
+Subject: [PATCH] gnome: Give the extension the Kimono Prayer identity
+
+Why: the Kimono Prayer extension has to install and run beside the original
+Mawaqit extension, and say Kimono's name in the top bar.
+
+What must survive upstream changes:
+- metadata.json: uuid prayer@kimono.app (GNOME installs it under that name, so
+  the source folder can keep upstream's name), name "Kimono Prayer", its own
+  description and url.
+- State lives in ~/.config/kimono-prayer/state.json, never upstream's
+  mrie-mawaqit folder.
+- The panel button's accessible name is "Kimono Prayer"; the HTTP user agent
+  and log lines say Kimono Prayer too. Upstream's mawaqit-* style classes stay:
+  they're internal.
+
+diff --git a/gnome/mawaqit@akramb.com/extension.js b/gnome/mawaqit@akramb.com/extension.js
+index d418422..7037fdc 100644
+--- a/gnome/mawaqit@akramb.com/extension.js
++++ b/gnome/mawaqit@akramb.com/extension.js
+@@ -20,15 +20,15 @@ export default class MawaqitExtension extends Extension {
+         this._requests = new Set();
+         this._lastNotificationCheck = Math.floor(Date.now() / 1000);
+         this._notificationSeen = new Set();
+-        this._session = new Soup.Session({timeout: 20, user_agent: 'AkramB-Mawaqit-GNOME/1.0'});
+-        this._file = Gio.File.new_for_path(GLib.build_filenamev([GLib.get_user_config_dir(), 'mrie-mawaqit', 'state.json']));
++        this._session = new Soup.Session({timeout: 20, user_agent: 'KimonoPrayer-GNOME/1.0'});
++        this._file = Gio.File.new_for_path(GLib.build_filenamev([GLib.get_user_config_dir(), 'kimono-prayer', 'state.json']));
+         try {
+             const [ok, bytes] = this._file.load_contents(null);
+             if (ok) this._state = JSON.parse(new TextDecoder().decode(bytes));
+         } catch (_) { /* First launch has no saved mosque. */ }
+         this._state ??= {};
+         this._data = this._state.calendar;
+-        this._button = new PanelMenu.Button(0.0, 'Mawaqit Prayer Times');
++        this._button = new PanelMenu.Button(0.0, 'Kimono Prayer');
+         const box = new St.BoxLayout({style_class: 'panel-status-menu-box'});
+         box.add_child(new St.Icon({icon_name: 'weather-clear-night-symbolic', style_class: 'system-status-icon'}));
+         this._panelLabel = new St.Label({text: '', y_align: Clutter.ActorAlign.CENTER});
+@@ -379,7 +379,7 @@ export default class MawaqitExtension extends Extension {
+     }
+ 
+     _locationError(error) {
+-        console.warn(`Mawaqit location request: ${error.message}`);
++        console.warn(`Kimono Prayer location request: ${error.message}`);
+         this._error(new Error('Could not access your location. Enable Location Services for GNOME Shell in Settings → Privacy, or enter “City, Country” below.'));
+     }
+ 
+diff --git a/gnome/mawaqit@akramb.com/metadata.json b/gnome/mawaqit@akramb.com/metadata.json
+index 9e222ea..4956e63 100644
+--- a/gnome/mawaqit@akramb.com/metadata.json
++++ b/gnome/mawaqit@akramb.com/metadata.json
+@@ -1,7 +1,7 @@
+ {
+-  "uuid": "mawaqit@akramb.com",
+-  "name": "Mawaqit Prayer Times",
+-  "description": "Mawaqit mosque schedules, calculated location fallback, prayer deadlines, night milestones and notifications in the GNOME top bar.",
++  "uuid": "prayer@kimono.app",
++  "name": "Kimono Prayer",
++  "description": "Your prayer times from Kimono Prayer in the GNOME top bar: the mosque or place you picked in Kimono, prayer deadlines, night milestones and notifications.",
+   "shell-version": [
+     "45",
+     "46",
+@@ -11,6 +11,6 @@
+     "50"
+   ],
+   "version": 3,
+-  "url": "https://github.com/akramboussanni/mawaqit-bar",
++  "url": "https://github.com/kimonoapps/repatches",
+   "author": "Akram Boussanni"
+ }
