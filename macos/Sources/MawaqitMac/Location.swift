@@ -28,7 +28,7 @@ final class LocationLookup: NSObject, @preconcurrency CLLocationManagerDelegate 
                 let reason: String? = if !enabled {
                     "Location Services is off. Turn it on in System Settings → Privacy & Security, or enter a city."
                 } else if status == .denied || status == .restricted {
-                    "Mawaqit can’t use your location. Allow it in System Settings → Privacy & Security → Location Services, or enter a city."
+                    "Kimono Prayer can’t use your location. Allow it in System Settings → Privacy & Security → Location Services, or enter a city."
                 } else { nil }
                 self?.onAvailabilityChange?(reason)
             }
@@ -72,7 +72,7 @@ final class LocationLookup: NSObject, @preconcurrency CLLocationManagerDelegate 
     }
 
     private func denied() {
-        finish(.failure(MawaqitError.message("Allow Mawaqit in System Settings → Privacy & Security → Location Services, or enter a city.")))
+        finish(.failure(MawaqitError.message("Allow Kimono Prayer in System Settings → Privacy & Security → Location Services, or enter a city.")))
     }
 
     private func finish(_ result: Result<CLLocationCoordinate2D, Error>) {

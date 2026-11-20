@@ -1,90 +1,75 @@
 import Foundation
 
-struct MawaqitService {
+/// Prayer times from Kimono, through the person's own Kimono Prayer link. Kimono does the
+/// Mawaqit, MasjidBox and calculated lookups; this app only reads the result.
+struct KimonoService {
     private let session: URLSession
 
     init(session: URLSession = .shared) {
         self.session = session
     }
 
-    func search(_ query: String) async throws -> [MosqueResult] {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        var components = URLComponents(string: "https://mawaqit.net/api/2.0/mosque/search")!
-        let pieces = trimmed.split(separator: ",", omittingEmptySubsequences: false).map {
-            $0.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        if pieces.count == 2, let latitude = Double(pieces[0]), let longitude = Double(pieces[1]) {
-            guard abs(latitude) <= 90, abs(longitude) <= 180 else {
-                throw MawaqitError.message("Enter valid latitude, longitude coordinates.")
-            }
-            components.queryItems = [URLQueryItem(name: "lat", value: String(latitude)),
-                URLQueryItem(name: "lon", value: String(longitude))]
-        } else {
-            guard trimmed.count >= 2 else {
-                throw MawaqitError.message("Enter at least two letters, a mosque URL or coordinates.")
-            }
-            components.queryItems = [URLQueryItem(name: "word", value: trimmed)]
-        }
-        guard let url = components.url else {
-            throw MawaqitError.message("The search could not be created.")
-        }
-        let data = try await get(url)
-        guard let array = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
-            throw MawaqitError.message("The search service returned an unexpected response.")
-        }
-        return array.compactMap { item in
-            let closed = (item["closed"] as? Bool) == true || (item["closed"] as? Int) == 1
-            guard !closed, let slug = item["slug"] as? String, let name = item["name"] as? String else { return nil }
-            return MosqueResult(slug: slug, name: name, location: item["localisation"] as? String)
-        }
+    /// The person's place and its timetable (yesterday onwards).
+    func mine(link: URL) async throws -> KimonoMine {
+        try decode(KimonoMine.self, try await send(URLRequest(url: link, timeoutInterval: 30)))
     }
 
-    func calendar(slug: String) async throws -> PrayerCalendar {
-        guard let encoded = slug.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
-              let url = URL(string: "https://mawaqit.net/en/m/\(encoded)") else {
-            throw MawaqitError.message("The mosque address is invalid.")
-        }
-        let data = try await get(url)
-        guard let html = String(data: data, encoding: .utf8) else {
-            throw MawaqitError.message("Mawaqit returned unreadable data.")
-        }
-        return try CalendarParser.parse(html: html)
-    }
-
-    func calculatedCalendar(query: String, year: Int) async throws -> CalculatedPrayerCalendar {
+    /// Words, a Mawaqit or MasjidBox link, or "lat, lon".
+    func search(link: URL, query: String) async throws -> [KimonoPlace] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count >= 2 else {
-            throw MawaqitError.message("Enter a city, address or coordinates for calculated times.")
+            throw MawaqitError.message("Enter at least two letters, a mosque link or coordinates.")
         }
-        var components: URLComponents
-        let pieces = trimmed.split(separator: ",", omittingEmptySubsequences: false).map {
-            $0.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        if pieces.count == 2, let latitude = Double(pieces[0]), let longitude = Double(pieces[1]) {
-            guard abs(latitude) <= 90, abs(longitude) <= 180 else {
-                throw MawaqitError.message("Enter valid latitude, longitude coordinates.")
-            }
-            components = URLComponents(string: "https://api.aladhan.com/v1/calendar/\(year)")!
-            components.queryItems = [URLQueryItem(name: "latitude", value: String(latitude)),
-                URLQueryItem(name: "longitude", value: String(longitude))]
-        } else {
-            components = URLComponents(string: "https://api.aladhan.com/v1/calendarByAddress/\(year)")!
-            components.queryItems = [URLQueryItem(name: "address", value: trimmed)]
-        }
-        guard let url = components.url else {
-            throw MawaqitError.message("The calculated-times request could not be created.")
-        }
-        return try AlAdhanParser.parse(try await get(url))
+        return try await search(link: link, items: [URLQueryItem(name: "q", value: trimmed)])
     }
 
-    private func get(_ url: URL) async throws -> Data {
-        var request = URLRequest(url: url, timeoutInterval: 20)
-        request.setValue("AkramB-Mawaqit-macOS/1.0", forHTTPHeaderField: "User-Agent")
+    /// Mosques around a position, and times calculated for it in `timezone`.
+    func search(link: URL, latitude: Double, longitude: Double, timezone: String) async throws -> [KimonoPlace] {
+        try await search(link: link, items: [
+            URLQueryItem(name: "lat", value: String(latitude)),
+            URLQueryItem(name: "lon", value: String(longitude)),
+            URLQueryItem(name: "tz", value: timezone),
+        ])
+    }
+
+    /// Makes `id` the person's place on every device, and answers like `mine`.
+    func choose(link: URL, id: String) async throws -> KimonoMine {
+        var request = URLRequest(url: link, timeoutInterval: 30)
+        request.httpMethod = "PUT"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(["id": id])
+        return try decode(KimonoMine.self, try await send(request))
+    }
+
+    private func search(link: URL, items: [URLQueryItem]) async throws -> [KimonoPlace] {
+        guard var components = URLComponents(url: link, resolvingAgainstBaseURL: false) else {
+            throw MawaqitError.message("The search could not be created.")
+        }
+        components.queryItems = items
+        guard let url = components.url else { throw MawaqitError.message("The search could not be created.") }
+        struct Places: Decodable { let places: [KimonoPlace] }
+        return try decode(Places.self, try await send(URLRequest(url: url, timeoutInterval: 30))).places
+    }
+
+    private func decode<T: Decodable>(_ type: T.Type, _ data: Data) throws -> T {
+        do { return try JSONDecoder().decode(type, from: data) }
+        catch { throw MawaqitError.message("Kimono returned an unexpected response.") }
+    }
+
+    private func send(_ request: URLRequest) async throws -> Data {
+        var request = request
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("KimonoPrayer-macOS/1.0", forHTTPHeaderField: "User-Agent")
         do {
             let (data, response) = try await session.data(for: request)
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-                let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-                throw MawaqitError.message("Service returned \(status). Try again later.")
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard status == 200 else {
+                struct Problem: Decodable { let error: String }
+                let message = (try? JSONDecoder().decode(Problem.self, from: data))?.error
+                if status == 401 {
+                    throw MawaqitError.linkExpired(message ?? "This link no longer works. Connect again from Kimono Prayer.")
+                }
+                throw MawaqitError.message(message ?? "Kimono returned \(status). Try again later.")
             }
             return data
         } catch let error as MawaqitError {
@@ -92,54 +77,5 @@ struct MawaqitService {
         } catch {
             throw MawaqitError.message(error.localizedDescription)
         }
-    }
-}
-
-enum AlAdhanParser {
-    static func parse(_ data: Data) throws -> CalculatedPrayerCalendar {
-        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              (root["code"] as? Int) == 200,
-              let months = root["data"] as? [String: Any] else {
-            throw MawaqitError.message("The calculated prayer-time service returned an unexpected response.")
-        }
-        let names = ["Fajr", "Sunrise", "Dhuhr", "Asr", "Maghrib", "Isha"]
-        var calendar = Array(repeating: [String: [String]](), count: 12)
-        var timezone: String?
-        var method: String?
-        for month in 1...12 {
-            guard let days = months[String(month)] as? [[String: Any]], !days.isEmpty else {
-                throw MawaqitError.message("Calculated prayer times are incomplete for this year.")
-            }
-            for item in days {
-                guard let timings = item["timings"] as? [String: Any],
-                      let date = item["date"] as? [String: Any],
-                      let gregorian = date["gregorian"] as? [String: Any],
-                      let rawDay = gregorian["day"] as? String,
-                      let day = Int(rawDay) else {
-                    throw MawaqitError.message("A calculated prayer-time entry is invalid.")
-                }
-                let values = try names.map { name -> String in
-                    guard let raw = timings[name] as? String,
-                          let match = raw.range(of: #"^\d{1,2}:\d{2}"#, options: .regularExpression) else {
-                        throw MawaqitError.message("A calculated prayer time is invalid.")
-                    }
-                    return String(raw[match])
-                }
-                calendar[month - 1][String(day)] = values
-                if let meta = item["meta"] as? [String: Any] {
-                    timezone = timezone ?? meta["timezone"] as? String
-                    if let methodInfo = meta["method"] as? [String: Any] {
-                        method = method ?? methodInfo["name"] as? String
-                    }
-                }
-            }
-        }
-        guard let timezone, TimeZone(identifier: timezone) != nil else {
-            throw MawaqitError.message("The calculated location has an invalid timezone.")
-        }
-        return CalculatedPrayerCalendar(
-            calendar: PrayerCalendar(timezone: timezone, calendar: calendar),
-            method: method ?? "Automatic local method"
-        )
     }
 }

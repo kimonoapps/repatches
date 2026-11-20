@@ -1,14 +1,17 @@
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
-import {parseCalendar, schedule, mosqueSlug} from '../calendar.js';
+import {schedule} from '../calendar.js';
+import {calendarFromTimetable} from '../kimono.js';
 function assert(value, message) { if (!value) throw new Error(message); }
 function rejects(callback) { let failed = false; try { callback(); } catch (_) { failed = true; } assert(failed, 'Expected rejection'); }
 const calendar = Array.from({length: 12}, () => Object.fromEntries(Array.from({length: 31}, (_, i) => [String(i + 1), ['05:00', '06:30', '12:30', '15:30', '18:00', '20:00']])));
-const data = {timezone: 'America/Montreal', calendar, message: 'A }; and a "quoted" message'};
-assert(parseCalendar(`let confData =\n${JSON.stringify(data)};`).message === data.message, 'Parse multiline and quoted braces');
-rejects(() => parseCalendar('<html>blocked</html>'));
-assert(mosqueSlug('https://mawaqit.net/en/m/alsalam-mtl') === 'alsalam-mtl', 'URL selection');
-rejects(() => mosqueSlug('../invalid'));
+const data = {timezone: 'America/Montreal', calendar};
+// Kimono's timetable, across the year end, reads like a yearly calendar.
+const feed = calendarFromTimetable({timezone: 'America/Montreal', days: ['2026-12-31', '2027-01-01', '2027-01-02']
+    .map(date => ({date, times: ['06:20', '07:40', '12:10', '14:20', '16:30', '18:00'], iqama: null, jumua: []}))});
+assert(feed.calendar[11]['31'] && feed.calendar[0]['1'] && feed.calendar[0]['2'], 'Timetable days fill the calendar');
+assert(schedule(feed, GLib.DateTime.new_from_iso8601('2027-01-01T18:00:00Z', null)).current.name === 'Dhuhr', 'New Year from the feed');
+rejects(() => calendarFromTimetable({timezone: 'America/Montreal', days: [{date: '2026-13-01', times: []}]}));
 const before = schedule(data, GLib.DateTime.new_from_iso8601('2026-09-12T08:00:00Z', null));
 assert(before.next.name === 'Fajr', 'Timezone conversion');
 const sunrise = schedule(data, GLib.DateTime.new_from_iso8601('2026-09-12T09:30:00Z', null));
@@ -57,8 +60,9 @@ assert(eveningCycle.phase === 'midnight', 'Following Isha restarts cycle');
 assert(eveningCycle.sunrise === GLib.DateTime.new_from_iso8601('2026-09-14T10:30:00Z', null).to_unix(), 'Night uses upcoming sunrise');
 if (ARGV[0]) {
     const [, bytes] = Gio.File.new_for_path(ARGV[0]).load_contents(null);
-    const live = parseCalendar(new TextDecoder().decode(bytes));
-    assert(schedule(live).today.length === 6, 'Live Mawaqit calendar');
+    // A saved answer from a Kimono Prayer link: gjs -m tests/calendar.js mine.json
+    const live = calendarFromTimetable(JSON.parse(new TextDecoder().decode(bytes)).timetable);
+    assert(schedule(live).today.length === 6, 'Live Kimono timetable');
     print(`Live calendar OK: ${live.timezone}`);
 }
 print('Calendar tests passed');

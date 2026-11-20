@@ -59,7 +59,7 @@ enum Presentation {
     static func upcomingNotifications(_ data: PrayerCalendar, now: Date, horizon: TimeInterval = 48 * 3600,
                                       place: String, calculated: Bool) throws -> [NotificationEvent] {
         var events: [String: NotificationEvent] = [:]
-        let source = calculated ? " · Calculated by AlAdhan" : ""
+        let source = calculated ? " · Calculated" : ""
         // Each day's view covers that day's prayers and its night, so step a day at a time.
         for offset in stride(from: 0.0, through: horizon, by: 86400) {
             let view = try ScheduleBuilder.build(data, now: now.addingTimeInterval(offset))

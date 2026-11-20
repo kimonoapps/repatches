@@ -1,7 +1,7 @@
 {
-  "uuid": "mawaqit@akramb.com",
-  "name": "Mawaqit Prayer Times",
-  "description": "Mawaqit mosque schedules, calculated location fallback, prayer deadlines, night milestones and notifications in the GNOME top bar.",
+  "uuid": "prayer@kimono.app",
+  "name": "Kimono Prayer",
+  "description": "Your prayer times from Kimono Prayer in the GNOME top bar: the mosque or place you picked in Kimono, prayer deadlines, night milestones and notifications.",
   "shell-version": [
     "45",
     "46",
@@ -11,6 +11,6 @@
     "50"
   ],
   "version": 3,
-  "url": "https://github.com/akramboussanni/mawaqit-bar",
+  "url": "https://github.com/kimonoapps/repatches",
   "author": "Akram Boussanni"
 }

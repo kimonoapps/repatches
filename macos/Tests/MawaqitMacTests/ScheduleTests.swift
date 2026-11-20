@@ -4,19 +4,6 @@ import Testing
 
 @Suite("Mawaqit schedule")
 struct ScheduleTests {
-    @Test func parserIgnoresBracesInsideStrings() throws {
-        let months = (1...12).map { _ in #"{"1":["05:00","06:30","13:00","16:30","19:00","20:30"]}"# }.joined(separator: ",")
-        let html = #"<script>const confData = {"timezone":"America/Toronto","calendar":["# + months + #"],"message":"}; still inside"};</script>"#
-        let parsed = try CalendarParser.parse(html: html)
-        #expect(parsed.timezone == "America/Toronto")
-        #expect(parsed.calendar.count == 12)
-    }
-
-    @Test func slugAcceptsMawaqitURL() throws {
-        #expect(try CalendarParser.slug(from: "https://mawaqit.net/en/m/aylmer-mosque") == "aylmer-mosque")
-        #expect(throws: (any Error).self) { try CalendarParser.slug(from: "https://example.com/nope") }
-    }
-
     @Test func scheduleBuildsPrayerAndNightWindows() throws {
         var months = Array(repeating: [String: [String]](), count: 12)
         for month in months.indices {
@@ -53,30 +40,39 @@ struct ScheduleTests {
         }
     }
 
-    @Test func parsesCalculatedAnnualCalendarAndAttribution() throws {
-        var months: [String: Any] = [:]
-        for month in 1...12 {
-            months[String(month)] = [[
-                "timings": ["Fajr": "05:15 (EDT)", "Sunrise": "06:40 (EDT)",
-                    "Dhuhr": "13:00 (EDT)", "Asr": "16:30 (EDT)",
-                    "Maghrib": "19:20 (EDT)", "Isha": "20:45 (EDT)"],
-                "date": ["gregorian": ["day": "01"]],
-                "meta": ["timezone": "America/Toronto", "method": ["name": "ISNA"]],
-            ]]
-        }
-        let data = try JSONSerialization.data(withJSONObject: ["code": 200, "status": "OK", "data": months])
-        let result = try AlAdhanParser.parse(data)
-        #expect(result.calendar.timezone == "America/Toronto")
-        #expect(result.calendar.calendar[0]["1"]?[0] == "05:15")
-        #expect(result.method == "ISNA")
+    @Test func kimonoTimetableFillsTheCalendarAcrossTheYearEnd() throws {
+        let json = #"""
+        {"place":{"id":"mawaqit:example","kind":"mawaqit","name":"Example Mosque","detail":"Gatineau","url":null},
+         "timetable":{"place":{"id":"mawaqit:example","kind":"mawaqit","name":"Example Mosque","detail":null,"url":null},
+           "timezone":"America/Toronto","fetchedAt":1,
+           "days":[{"date":"2026-12-31","times":["06:20","07:40","12:10","14:20","16:30","18:00"],"iqama":null,"jumua":[]},
+                   {"date":"2027-01-01","times":["06:21","07:41","12:11","14:21","16:31","18:01"],"iqama":["06:40",null,null,null,null],"jumua":[]},
+                   {"date":"2027-01-02","times":["06:22","07:42","12:12","14:22","16:32","18:02"],"iqama":null,"jumua":["13:00"]}]},
+         "recent":[]}
+        """#
+        let mine = try JSONDecoder().decode(KimonoMine.self, from: Data(json.utf8))
+        #expect(mine.place?.kind == .mawaqit)
+        let calendar = try #require(try mine.timetable?.prayerCalendar())
+        #expect(calendar.timezone == "America/Toronto")
+        #expect(calendar.calendar[11]["31"]?.first == "06:20")
+        #expect(calendar.calendar[0]["1"]?.first == "06:21")
+        // New Year’s Day at 13:00 in Toronto: yesterday, today and tomorrow all come from the feed.
+        let view = try ScheduleBuilder.build(calendar, now: try #require(ISO8601DateFormatter().date(from: "2027-01-01T18:00:00Z")))
+        #expect(view.current?.name == "Dhuhr")
+        #expect(view.next?.name == "Asr")
     }
 
-    @Test func oldSavedStateStillDecodesAsMawaqit() throws {
-        let data = Data(#"{"notificationsEnabled":true,"slug":"example"}"#.utf8)
-        let state = try JSONDecoder().decode(SavedState.self, from: data)
-        #expect(state.slug == "example")
-        #expect(state.source == nil)
-        #expect(state.calculationQuery == nil)
+    @Test func kimonoTimetableRefusesUnreadableDays() {
+        let bad = KimonoTimetable(timezone: "America/Toronto", days: [KimonoDay(date: "2026-13-01", times: ["05:00"])])
+        #expect(throws: (any Error).self) { try bad.prayerCalendar() }
+        let zone = KimonoTimetable(timezone: "Mars/Olympus", days: [])
+        #expect(throws: (any Error).self) { try zone.prayerCalendar() }
+    }
+
+    @Test func aPlaceWithoutATimetableStillDecodes() throws {
+        let json = #"{"place":null,"timetable":null,"recent":[],"problem":"Pick a place first."}"#
+        let mine = try JSONDecoder().decode(KimonoMine.self, from: Data(json.utf8))
+        #expect(mine.place == nil && mine.timetable == nil && mine.problem == "Pick a place first.")
     }
 
     @Test func countdownsUseCompactMinutesAndNoSeparator() throws {

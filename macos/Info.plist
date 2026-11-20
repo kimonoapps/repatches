@@ -3,19 +3,26 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleDevelopmentRegion</key><string>en</string>
-    <key>CFBundleDisplayName</key><string>Mawaqit</string>
+    <key>CFBundleDisplayName</key><string>Kimono Prayer</string>
     <key>CFBundleExecutable</key><string>MawaqitMac</string>
-    <key>CFBundleIdentifier</key><string>com.akramb.mawaqit</string>
+    <key>CFBundleIdentifier</key><string>app.kimono.prayer.menubar</string>
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-    <key>CFBundleName</key><string>Mawaqit</string>
+    <key>CFBundleName</key><string>Kimono Prayer</string>
     <key>CFBundleIconFile</key><string>Mawaqit.icns</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>1.0</string>
     <key>CFBundleVersion</key><string>1</string>
     <key>LSMinimumSystemVersion</key><string>13.0</string>
     <key>LSUIElement</key><true/>
-    <key>NSLocationUsageDescription</key><string>Mawaqit uses your location when you press the location button to offer local prayer times.</string>
-    <key>NSLocationWhenInUseUsageDescription</key><string>Mawaqit uses your location when you press the location button to offer local prayer times.</string>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key><string>app.kimono.prayer.menubar.connect</string>
+            <key>CFBundleURLSchemes</key><array><string>mawaqit-kimono</string></array>
+        </dict>
+    </array>
+    <key>NSLocationUsageDescription</key><string>Kimono Prayer uses your location when you press the location button to find mosques and prayer times near you.</string>
+    <key>NSLocationWhenInUseUsageDescription</key><string>Kimono Prayer uses your location when you press the location button to find mosques and prayer times near you.</string>
     <key>NSHumanReadableCopyright</key><string>Copyright © 2026 Akram Boussanni</string>
 </dict>
 </plist>

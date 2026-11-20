@@ -2,8 +2,8 @@
 set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-APP_DIR="$SCRIPT_DIR/dist/Mawaqit.app"
-ZIP_PATH="$SCRIPT_DIR/dist/Mawaqit.zip"
+APP_DIR="$SCRIPT_DIR/dist/Kimono Prayer.app"
+ZIP_PATH="$SCRIPT_DIR/dist/Kimono Prayer.zip"
 SWIFT_COMMAND=$(command -v swift)
 
 # Swiftly's shim can fall back to Apple's bundled compiler when invoked from

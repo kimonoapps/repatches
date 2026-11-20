@@ -2,10 +2,10 @@
 set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-APP_DIR="$SCRIPT_DIR/dist/Mawaqit.app"
-ZIP_PATH="$SCRIPT_DIR/dist/Mawaqit.zip"
-DMG_PATH="$SCRIPT_DIR/dist/Mawaqit.dmg"
-NOTARY_PROFILE_NAME="${NOTARY_PROFILE:-mawaqit-release}"
+APP_DIR="$SCRIPT_DIR/dist/Kimono Prayer.app"
+ZIP_PATH="$SCRIPT_DIR/dist/Kimono Prayer.zip"
+DMG_PATH="$SCRIPT_DIR/dist/Kimono Prayer.dmg"
+NOTARY_PROFILE_NAME="${NOTARY_PROFILE:-kimono-prayer-release}"
 
 # CI passes Apple credentials through the environment; locally a Keychain profile is used.
 notarize() {
@@ -47,7 +47,7 @@ fi
 rm -f "$DMG_PATH"
 "$DMGBUILD" -s "$SCRIPT_DIR/dmg-settings.py" -D app="$APP_DIR" \
     -D icon="$SCRIPT_DIR/Assets/Mawaqit.icns" \
-    -D background="$SCRIPT_DIR/Assets/dmg-background.tiff" Mawaqit "$DMG_PATH"
+    -D background="$SCRIPT_DIR/Assets/dmg-background.tiff" "Kimono Prayer" "$DMG_PATH"
 codesign --force --timestamp --sign "$SIGN_IDENTITY" "$DMG_PATH"
 notarize "$DMG_PATH"
 xcrun stapler staple "$DMG_PATH"

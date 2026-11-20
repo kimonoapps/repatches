@@ -1,12 +1,12 @@
-# dmgbuild layout for Mawaqit.dmg; release.sh passes app, icon and background via -D.
+# dmgbuild layout for Kimono Prayer.dmg; release.sh passes app, icon and background via -D.
 app = defines["app"]
 
 format = "UDZO"
-volume_name = "Mawaqit"
+volume_name = "Kimono Prayer"
 icon = defines["icon"]
 files = [app]
 symlinks = {"Applications": "/Applications"}
-hide_extensions = ["Mawaqit.app"]
+hide_extensions = ["Kimono Prayer.app"]
 
 background = defines["background"]
 window_rect = ((200, 140), (640, 400))
@@ -22,4 +22,4 @@ arrange_by = None
 icon_size = 128
 text_size = 14
 # Centres line up with the arrow drawn by Assets/make-dmg-background.swift.
-icon_locations = {"Mawaqit.app": (170, 200), "Applications": (470, 200)}
+icon_locations = {"Kimono Prayer.app": (170, 200), "Applications": (470, 200)}

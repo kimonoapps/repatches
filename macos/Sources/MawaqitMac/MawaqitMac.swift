@@ -36,6 +36,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         return false
     }
 
+    /// mawaqit-kimono://connect?link=… from Kimono Prayer's "Connect" button.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard let link = urls.lazy.compactMap({ KimonoLink.parse($0.absoluteString) }).first else { return }
+        store.connect(link)
+        store.showingSettings = false
+        showPanel()
+    }
+
     private func showPanel() {
         store.tick()
         if !popover.isVisible { popover.show(below: statusItem?.button) }
@@ -47,13 +55,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         NSApp.setActivationPolicy(.accessory)
         installMainMenu()
         let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.autosaveName = "Mawaqit"
+        statusItem.autosaveName = "KimonoPrayer"
         statusItem.isVisible = true
         self.statusItem = statusItem
         if let button = statusItem.button {
-            button.identifier = NSUserInterfaceItemIdentifier("Mawaqit")
-            button.setAccessibilityIdentifier("Mawaqit")
-            button.image = NSImage(systemSymbolName: "moon.stars.fill", accessibilityDescription: "Mawaqit Prayer Times")
+            button.identifier = NSUserInterfaceItemIdentifier("KimonoPrayer")
+            button.setAccessibilityIdentifier("KimonoPrayer")
+            button.image = NSImage(systemSymbolName: "moon.stars.fill", accessibilityDescription: "Kimono Prayer")
             button.image?.isTemplate = true
             button.imagePosition = .imageLeading
             button.target = self
@@ -70,7 +78,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             statusItem.isVisible = true
             statusItem.length = iconOnly ? NSStatusItem.squareLength : NSStatusItem.variableLength
             statusItem.button?.title = iconOnly || title.isEmpty ? "" : " \(title)"
-            statusItem.button?.toolTip = title.isEmpty ? "Mawaqit Prayer Times" : title
+            statusItem.button?.toolTip = title.isEmpty ? "Kimono Prayer" : title
         }.store(in: &cancellables)
         timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.store.tick() }
@@ -82,10 +90,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         guard let statusItem, let button = statusItem.button else { return }
         if NSApp.currentEvent?.type == .rightMouseUp {
             let menu = NSMenu()
-            addCommand("Open Mawaqit", action: #selector(showMainWindow), to: menu)
+            addCommand("Open Kimono Prayer", action: #selector(showMainWindow), to: menu)
             addCommand("Settings…", action: #selector(showSettings), key: ",", to: menu)
             menu.addItem(.separator())
-            addCommand("Quit Mawaqit", action: #selector(quit), key: "q", to: menu)
+            addCommand("Quit Kimono Prayer", action: #selector(quit), key: "q", to: menu)
             statusItem.menu = menu
             button.performClick(nil)
             statusItem.menu = nil
@@ -104,13 +112,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     private func installMainMenu() {
         let main = NSMenu()
-        let appItem = main.addItem(withTitle: "Mawaqit", action: nil, keyEquivalent: "")
-        let appMenu = NSMenu(title: "Mawaqit")
+        let appItem = main.addItem(withTitle: "Kimono Prayer", action: nil, keyEquivalent: "")
+        let appMenu = NSMenu(title: "Kimono Prayer")
         appItem.submenu = appMenu
-        addCommand("About Mawaqit", action: #selector(showAbout), to: appMenu)
+        addCommand("About Kimono Prayer", action: #selector(showAbout), to: appMenu)
         addCommand("Settings…", action: #selector(showSettings), key: ",", to: appMenu)
         appMenu.addItem(.separator())
-        addCommand("Quit Mawaqit", action: #selector(quit), key: "q", to: appMenu)
+        addCommand("Quit Kimono Prayer", action: #selector(quit), key: "q", to: appMenu)
         let editItem = main.addItem(withTitle: "Edit", action: nil, keyEquivalent: "")
         let edit = NSMenu(title: "Edit")
         editItem.submenu = edit

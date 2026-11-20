@@ -2,59 +2,6 @@ import GLib from 'gi://GLib';
 
 export const NAMES = ['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
 
-export function parseCalendar(html) {
-    const assignment = /(?:var|let|const)\s+confData\s*=\s*/.exec(html);
-    if (!assignment)
-        throw new Error('Mawaqit did not return a prayer calendar. Try again later.');
-    // Scan the JSON object without confusing braces or semicolons in quoted messages.
-    const start = assignment.index + assignment[0].length;
-    let depth = 0, quoted = false, escaped = false;
-    for (let i = start; i < html.length; i++) {
-        const c = html[i];
-        if (quoted) {
-            if (escaped) escaped = false;
-            else if (c === '\\') escaped = true;
-            else if (c === '"') quoted = false;
-        } else if (c === '"') quoted = true;
-        else if (c === '{') depth++;
-        else if (c === '}' && --depth === 0) {
-            const data = JSON.parse(html.slice(start, i + 1));
-            if (!data.timezone || !Array.isArray(data.calendar) || data.calendar.length !== 12)
-                throw new Error('This mosque has an unsupported prayer calendar.');
-            return data;
-        }
-    }
-    throw new Error('The prayer calendar is incomplete.');
-}
-
-export function parseCalculatedCalendar(payload) {
-    if (!payload || payload.code !== 200 || !payload.data || typeof payload.data !== 'object')
-        throw new Error('The calculated prayer-time service returned an unexpected response.');
-    const calendar = Array.from({length: 12}, () => ({}));
-    let timezone = null, method = null;
-    for (let month = 1; month <= 12; month++) {
-        const days = payload.data[String(month)];
-        if (!Array.isArray(days) || !days.length)
-            throw new Error('Calculated prayer times are incomplete for this year.');
-        for (const item of days) {
-            const day = Number(item?.date?.gregorian?.day);
-            if (!Number.isInteger(day) || day < 1 || day > 31 || !item?.timings)
-                throw new Error('A calculated prayer-time entry is invalid.');
-            const times = NAMES.map(name => {
-                const match = /^(\d{1,2}:\d{2})/.exec(item.timings[name]);
-                if (!match) throw new Error('A calculated prayer time is invalid.');
-                return match[1];
-            });
-            calendar[month - 1][String(day)] = times;
-            timezone ??= item.meta?.timezone;
-            method ??= item.meta?.method?.name;
-        }
-    }
-    if (!timezone || !GLib.TimeZone.new_identifier(timezone))
-        throw new Error('The calculated location has an invalid timezone.');
-    return {calendar: {timezone, calendar}, method: method ?? 'Automatic local method'};
-}
-
 export function schedule(data, now = GLib.DateTime.new_now_utc()) {
     const zone = GLib.TimeZone.new_identifier(data.timezone);
     if (!zone) throw new Error('The mosque timezone is invalid.');
@@ -108,12 +55,4 @@ export function schedule(data, now = GLib.DateTime.new_now_utc()) {
             : timestamp < cycleNight.lastThird ? 'lastThird' : 'sunrise'};
     return {today, next, current, night, milestones, now: timestamp,
         date: local.format('%A, %e %B'), timezone: data.timezone};
-}
-
-export function mosqueSlug(value) {
-    const text = value.trim();
-    const match = /^https:\/\/mawaqit\.net\/(?:[a-z]{2}\/)?(?:m\/)?([a-zA-Z0-9_-]+)\/?$/.exec(text);
-    const slug = match ? match[1] : text;
-    if (!/^[a-zA-Z0-9_-]+$/.test(slug)) throw new Error('Enter a mosque slug or its Mawaqit URL.');
-    return slug;
 }

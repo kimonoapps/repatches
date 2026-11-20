@@ -8,9 +8,8 @@ final class MawaqitStore: ObservableObject {
     @Published var state = SavedState()
     @Published var schedule: ScheduleView?
     @Published var query = ""
-    @Published var results: [MosqueResult] = []
-    @Published var calculatedSuggestion: String?
-    @Published var status = "Enter a mosque or city and press Return"
+    @Published var results: [KimonoPlace] = []
+    @Published var status = ""
     @Published var isLoading = false
     @Published var isLocating = false
     @Published var locationUnavailable: String?
@@ -20,7 +19,7 @@ final class MawaqitStore: ObservableObject {
     @Published var iconOnlyMenuBar = UserDefaults.standard.bool(forKey: "iconOnlyMenuBar")
     @Published var launchAtLogin = SMAppService.mainApp.status == .enabled
 
-    private let service = MawaqitService()
+    private let service = KimonoService()
     private let locationLookup = LocationLookup()
     private var searchTask: Task<Void, Never>?
     private var refreshTask: Task<Void, Never>?
@@ -29,14 +28,19 @@ final class MawaqitStore: ObservableObject {
 
     private var stateURL: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return base.appendingPathComponent("Mawaqit", isDirectory: true).appendingPathComponent("state.json")
+        return base.appendingPathComponent("Kimono Prayer", isDirectory: true).appendingPathComponent("state.json")
     }
 
-    var hasLocation: Bool { state.slug != nil || state.calculationQuery != nil }
-    var isCalculated: Bool { state.source == .aladhan || (state.slug == nil && state.calculationQuery != nil) }
+    var isConnected: Bool { state.link != nil }
+    var hasLocation: Bool { isConnected && state.place != nil }
+    var isCalculated: Bool { state.place?.kind == .calculated }
+    /// "Kimono · Mawaqit", "Kimono · MasjidBox" or "Kimono · Calculated".
+    var sourceLabel: String { ["Kimono", state.place?.kind.label].compactMap { $0 }.joined(separator: " · ") }
+    private var link: URL? { state.link.flatMap(URL.init(string:)) }
 
     init() {
         load()
+        if !isConnected { status = Self.connectPrompt }
         render()
         locationLookup.onAvailabilityChange = { [weak self] reason in self?.locationUnavailable = reason }
         if state.notificationsEnabled {
@@ -50,7 +54,7 @@ final class MawaqitStore: ObservableObject {
         // The system-wide switch has no callback; recheck whenever the panel refreshes.
         locationLookup.refreshAvailability()
         scheduleNotifications()
-        if hasLocation, Date().timeIntervalSince(lastAttempt ?? .distantPast) > 3600 {
+        if isConnected, Date().timeIntervalSince(lastAttempt ?? .distantPast) > 3600 {
             refresh()
         }
     }
@@ -68,66 +72,96 @@ final class MawaqitStore: ObservableObject {
                 let coordinates = String(format: "%.4f, %.4f", locale: Locale(identifier: "en_US_POSIX"),
                                          coordinate.latitude, coordinate.longitude)
                 self.query = coordinates
-                // Coordinates use the same dual-provider flow as a typed location:
-                // nearby Mawaqit mosques plus the AlAdhan calculation option.
-                self.submitSearch()
+                // Kimono answers with the mosques around and times calculated for here.
+                self.search(latitude: coordinate.latitude, longitude: coordinate.longitude)
             case .failure(let error):
                 self.status = error.localizedDescription
             }
         }
     }
 
-    func submitSearch() {
+    static let connectPrompt = "Paste your link from Kimono Prayer and press Return."
+
+    /// A Kimono Prayer link, from the search field or a mawaqit-kimono://connect address.
+    func connect(_ link: URL) {
         searchTask?.cancel()
+        refreshTask?.cancel()
+        let notifications = state.notificationsEnabled
+        state = SavedState(notificationsEnabled: notifications, link: link.absoluteString)
+        query = ""
         results = []
-        calculatedSuggestion = nil
-        let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        if text.lowercased().hasPrefix("http") {
-            do { choose(slug: try CalendarParser.slug(from: text), name: nil) }
-            catch { status = error.localizedDescription }
+        status = ""
+        save()
+        render()
+        scheduleNotifications()
+        refresh()
+    }
+
+    func disconnect() {
+        searchTask?.cancel()
+        refreshTask?.cancel()
+        state = SavedState(notificationsEnabled: state.notificationsEnabled)
+        query = ""
+        results = []
+        status = Self.connectPrompt
+        isLoading = false
+        save()
+        render()
+        scheduleNotifications()
+    }
+
+    func submitSearch() {
+        if let link = KimonoLink.parse(query) {
+            connect(link)
             return
         }
-        if text.count >= 2 { calculatedSuggestion = text }
-        let direct = text.range(of: #"^[a-zA-Z0-9_-]+$"#, options: .regularExpression) != nil
-            ? MosqueResult(slug: text, name: text, location: "Open mosque directly") : nil
-        if let direct { results = [direct] }
+        guard isConnected else {
+            status = Self.connectPrompt
+            return
+        }
+        let text = query
+        runSearch { service, link in try await service.search(link: link, query: text) }
+    }
+
+    private func search(latitude: Double, longitude: Double) {
+        let timezone = TimeZone.current.identifier
+        runSearch { service, link in
+            try await service.search(link: link, latitude: latitude, longitude: longitude, timezone: timezone)
+        }
+    }
+
+    private func runSearch(_ lookup: @escaping (KimonoService, URL) async throws -> [KimonoPlace]) {
+        guard let link else { status = Self.connectPrompt; return }
+        searchTask?.cancel()
+        results = []
         isLoading = true
         status = "Searching…"
         searchTask = Task {
             do {
-                var matches = try await service.search(text)
+                let places = try await lookup(service, link)
                 guard !Task.isCancelled else { return }
-                if let direct, !matches.contains(where: { $0.slug == direct.slug }) {
-                    matches.insert(direct, at: 0)
-                }
-                results = Array(matches.prefix(10))
-                status = matches.isEmpty
-                    ? "No mosques found. Choose calculated times or try another location."
-                    : "\(matches.count) mosques found; showing up to 10."
+                results = Array(places.prefix(10))
+                status = places.isEmpty
+                    ? "Nothing found. Try another search, a mosque's Mawaqit or MasjidBox link, or your location."
+                    : "\(places.count) found; showing up to 10."
             } catch {
                 guard !Task.isCancelled else { return }
-                status = "Mawaqit search failed: \(error.localizedDescription) Calculated times are still available."
+                fail(error)
             }
             isLoading = false
         }
     }
 
-    func choose(slug: String, name: String?) {
-        refresh(candidateSlug: slug, candidateName: name ?? slug)
-    }
-
-    func useCalculatedTimes() {
-        guard let suggestion = calculatedSuggestion else { return }
+    /// Makes the place the person's own in Kimono, so every device follows.
+    func choose(_ place: KimonoPlace) {
+        guard let link else { return }
         searchTask?.cancel()
-        refreshCalculated(query: suggestion, name: suggestion)
+        fetch("Loading prayer times…") { service in try await service.choose(link: link, id: place.id) }
     }
 
     func refresh() {
-        if isCalculated, let calculationQuery = state.calculationQuery {
-            refreshCalculated(query: calculationQuery, name: state.name)
-        } else if let slug = state.slug {
-            refresh(candidateSlug: slug, candidateName: state.name)
-        }
+        guard let link else { return }
+        fetch("Loading prayer times…") { service in try await service.mine(link: link) }
     }
 
     func setNotifications(_ enabled: Bool) {
@@ -153,7 +187,7 @@ final class MawaqitStore: ObservableObject {
             }
             launchAtLogin = SMAppService.mainApp.status == .enabled
             if enabled && !launchAtLogin {
-                status = "Approve Mawaqit under System Settings → General → Login Items."
+                status = "Approve Kimono Prayer under System Settings → General → Login Items."
             }
         } catch {
             launchAtLogin = SMAppService.mainApp.status == .enabled
@@ -165,70 +199,63 @@ final class MawaqitStore: ObservableObject {
         Presentation.remaining(until: date, now: schedule?.now ?? Date())
     }
 
-    private func refresh(candidateSlug: String, candidateName: String?) {
+    private func fetch(_ message: String, _ request: @escaping (KimonoService) async throws -> KimonoMine) {
         refreshTask?.cancel()
         lastAttempt = Date()
         isLoading = true
-        status = "Loading prayer times…"
+        status = message
         refreshTask = Task {
             do {
-                let calendar = try await service.calendar(slug: candidateSlug)
-                _ = try ScheduleBuilder.build(calendar)
+                let mine = try await request(service)
+                let calendar = try mine.timetable?.prayerCalendar()
+                if let calendar { _ = try ScheduleBuilder.build(calendar) }
                 guard !Task.isCancelled else { return }
-                state = SavedState(notificationsEnabled: state.notificationsEnabled, slug: candidateSlug,
-                    name: candidateName, calendar: calendar, fetched: Date(), year: utcYear(),
-                    source: .mawaqit, calculationQuery: nil, calculationMethod: nil)
-                query = ""
-                results = []
-                calculatedSuggestion = nil
-                status = ""
-                save()
-                render()
-                scheduleNotifications()
+                apply(mine, calendar: calendar)
             } catch {
-                if !Task.isCancelled { status = error.localizedDescription }
+                if !Task.isCancelled { fail(error) }
             }
             isLoading = false
         }
     }
 
-    private func refreshCalculated(query calculationQuery: String, name: String?) {
-        refreshTask?.cancel()
-        lastAttempt = Date()
-        isLoading = true
-        status = "Calculating prayer times…"
-        refreshTask = Task {
-            do {
-                let result = try await service.calculatedCalendar(query: calculationQuery, year: utcYear())
-                _ = try ScheduleBuilder.build(result.calendar)
-                guard !Task.isCancelled else { return }
-                state = SavedState(notificationsEnabled: state.notificationsEnabled, slug: nil,
-                    name: name ?? calculationQuery, calendar: result.calendar, fetched: Date(), year: utcYear(),
-                    source: .aladhan, calculationQuery: calculationQuery, calculationMethod: result.method)
-                query = ""
-                results = []
-                calculatedSuggestion = nil
-                status = ""
-                save()
-                render()
-                scheduleNotifications()
-            } catch {
-                if !Task.isCancelled { status = error.localizedDescription }
-            }
-            isLoading = false
+    private func apply(_ mine: KimonoMine, calendar: PrayerCalendar?) {
+        let samePlace = mine.place?.id == state.place?.id
+        state.place = mine.place
+        if let calendar {
+            state.calendar = calendar
+            state.fetched = Date()
+            query = ""
+            results = []
+            status = ""
+        } else if mine.place == nil {
+            state.calendar = nil
+            state.fetched = nil
+            status = "Search for your mosque, or use where you are."
+        } else {
+            // Kimono knows the place but couldn't reach its times: keep the last ones for it.
+            if !samePlace { state.calendar = nil; state.fetched = nil }
+            status = mine.problem ?? "Kimono couldn't reach the prayer times. Try again in a moment."
         }
+        save()
+        render()
+        scheduleNotifications()
+    }
+
+    /// A renewed link answers 401: forget it, keep the times, and ask for the new one.
+    private func fail(_ error: Error) {
+        if case .linkExpired = error as? MawaqitError {
+            state.link = nil
+            results = []
+            save()
+            render()
+        }
+        status = error.localizedDescription
     }
 
     private func render() {
         guard let data = state.calendar else {
             schedule = nil
             statusTitle = ""
-            return
-        }
-        guard state.year == utcYear() else {
-            schedule = nil
-            statusTitle = ""
-            status = "Refresh required for the new year."
             return
         }
         do {
@@ -256,9 +283,9 @@ final class MawaqitStore: ObservableObject {
         guard key != scheduledNotificationsKey else { return }
         scheduledNotificationsKey = key
         center.removeAllPendingNotificationRequests()
-        guard state.notificationsEnabled, let data = state.calendar, state.year == utcYear(),
+        guard state.notificationsEnabled, let data = state.calendar,
               let events = try? Presentation.upcomingNotifications(data, now: Date(),
-                  place: state.name ?? state.slug ?? state.calculationQuery ?? "Mawaqit",
+                  place: state.place?.name ?? "Kimono Prayer",
                   calculated: isCalculated) else { return }
         for event in events {
             let content = UNMutableNotificationContent()
@@ -273,12 +300,6 @@ final class MawaqitStore: ObservableObject {
 
     private func time(_ date: Date, _ view: ScheduleView) -> String {
         ScheduleBuilder.time(date, timezone: view.timezone)
-    }
-
-    private func utcYear() -> Int {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
-        return calendar.component(.year, from: Date())
     }
 
     private func load() {

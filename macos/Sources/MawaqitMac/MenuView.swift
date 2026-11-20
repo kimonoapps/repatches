@@ -26,19 +26,16 @@ struct MenuContentView: View {
     @ViewBuilder
     private var schedulePage: some View {
             search
-            if let reason = store.locationUnavailable {
+            if store.isConnected, let reason = store.locationUnavailable {
                 // Disabled buttons show no tooltip on macOS, so say why the arrow is grayed out.
                 Label(reason, systemImage: "location.slash")
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if !store.results.isEmpty || store.calculatedSuggestion != nil {
+            if !store.results.isEmpty {
                 // Search results have their own bounded area; the schedule never scrolls.
                 ScrollView {
-                    VStack(spacing: 8) {
-                        if !store.results.isEmpty { results }
-                        if store.calculatedSuggestion != nil { calculatedOption }
-                    }
+                    VStack(spacing: 8) { results }
                 }
                 .frame(height: 180)
             } else if let view = store.schedule {
@@ -55,35 +52,41 @@ struct MenuContentView: View {
 
     private var search: some View {
         GlassRow { HStack(spacing: 10) {
-            NativeSearchField(text: $store.query, onSubmit: store.submitSearch)
+            NativeSearchField(text: $store.query,
+                placeholder: store.isConnected ? "Mosque, city or coordinates" : "Paste your Kimono Prayer link",
+                onSubmit: store.submitSearch)
                 .disabled(store.isLocating)
                 .accessibilityLabel("Search mosques or locations")
             if store.isLoading { ProgressView().controlSize(.small) }
-            Button { store.useCurrentLocation() } label: {
-                Group {
-                    if store.isLocating { ProgressView().controlSize(.small) }
-                    else { Image(systemName: "location") }
-                }
-                .glassLabel(in: .circle)
-            }
-            .modifier(GlassButton(round: true))
-            .disabled(store.isLocating || store.isLoading || store.locationUnavailable != nil)
-            .help(store.locationUnavailable ?? "Use current location")
-            .accessibilityLabel("Use current location")
+            if store.isConnected { locationButton }
         } }
+    }
+
+    private var locationButton: some View {
+        Button { store.useCurrentLocation() } label: {
+            Group {
+                if store.isLocating { ProgressView().controlSize(.small) }
+                else { Image(systemName: "location") }
+            }
+            .glassLabel(in: .circle)
+        }
+        .modifier(GlassButton(round: true))
+        .disabled(store.isLocating || store.isLoading || store.locationUnavailable != nil)
+        .help(store.locationUnavailable ?? "Use current location")
+        .accessibilityLabel("Use current location")
     }
 
     private var results: some View {
         VStack(spacing: 10) {
-            ForEach(store.results) { mosque in
-                Button { store.choose(slug: mosque.slug, name: mosque.name) } label: {
+            ForEach(store.results) { place in
+                Button { store.choose(place) } label: {
                     HStack(spacing: 10) {
-                        Image(systemName: "mappin.and.ellipse").foregroundStyle(.tint)
+                        Image(systemName: place.kind == .calculated ? "location.circle" : "mappin.and.ellipse")
+                            .foregroundStyle(.tint)
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(mosque.name).fontWeight(.medium)
-                            if let location = mosque.location {
-                                Text(location).font(.caption).foregroundStyle(.secondary)
-                            }
+                            Text(place.name).fontWeight(.medium)
+                            Text([place.kind.label, place.detail].compactMap { $0 }.joined(separator: " · "))
+                                .font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
                         Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
@@ -94,29 +97,10 @@ struct MenuContentView: View {
         }
     }
 
-    private var calculatedOption: some View {
-        Button { store.useCalculatedTimes() } label: {
-            HStack(spacing: 10) {
-                Image(systemName: "location.circle").font(.title2).foregroundStyle(.tint)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Use calculated prayer times").fontWeight(.medium)
-                    Text("AlAdhan · City, country or coordinates")
-                        .font(.caption).foregroundStyle(.secondary)
-                    Text("May differ from your local mosque.")
-                        .font(.caption2).foregroundStyle(.secondary)
-                }
-                Spacer()
-                Image(systemName: "chevron.right").font(.caption)
-            }.padding(12).contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 14))
-    }
-
     @ViewBuilder
     private func schedule(_ view: ScheduleView) -> some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(store.state.name ?? store.state.slug ?? store.state.calculationQuery ?? "Mawaqit")
+            Text(store.state.place?.name ?? "Kimono Prayer")
                 .font(.headline).lineLimit(1)
             Text(view.dateText).font(.subheadline).foregroundStyle(.secondary)
             HStack(spacing: 5) {
@@ -124,7 +108,7 @@ struct MenuContentView: View {
                     .lineLimit(1).truncationMode(.middle)
                 Spacer(minLength: 0)
                 Button(action: openSettings) {
-                    Text(store.isCalculated ? "AlAdhan ⓘ" : "Mawaqit ⓘ")
+                    Text("\(store.sourceLabel) ⓘ")
                 }
                 .buttonStyle(.plain)
                 .help("Prayer time source and calculation details")
@@ -165,7 +149,7 @@ struct MenuContentView: View {
                 }
                 .modifier(GlassButton(round: false))
                 .keyboardShortcut("r")
-                .disabled(!store.hasLocation || store.isLoading)
+                .disabled(!store.isConnected || store.isLoading)
                 Spacer()
                 Button(action: openSettings) {
                     Label("Settings…", systemImage: "gearshape")
@@ -243,6 +227,7 @@ struct MenuContentView: View {
 /// NSSearchField supplies the system bezel, clear button, and editing behavior.
 private struct NativeSearchField: NSViewRepresentable {
     @Binding var text: String
+    var placeholder: String
     var onSubmit: () -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
@@ -252,18 +237,22 @@ private struct NativeSearchField: NSViewRepresentable {
         field.controlSize = .small
         field.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         field.setContentHuggingPriority(.required, for: .vertical)
-        field.placeholderString = "Mosque, city or coordinates"
         field.delegate = context.coordinator
         field.target = context.coordinator
         field.action = #selector(Coordinator.submit(_:))
         field.sendsWholeSearchString = true
-        field.setAccessibilityLabel("Mosque, city or coordinates")
+        field.placeholderString = placeholder
+        field.setAccessibilityLabel(placeholder)
         return field
     }
 
     func updateNSView(_ field: NSSearchField, context: Context) {
         context.coordinator.parent = self
         if field.stringValue != text { field.stringValue = text }
+        if field.placeholderString != placeholder {
+            field.placeholderString = placeholder
+            field.setAccessibilityLabel(placeholder)
+        }
         field.isEnabled = context.environment.isEnabled
     }
 
@@ -297,11 +286,11 @@ struct SettingsPage: View {
         section("Prayer reminders") {
             toggle("Notifications", isOn: Binding(get: { store.state.notificationsEnabled }, set: store.setNotifications))
             if store.state.notificationsEnabled && store.notificationsBlocked {
-                Label("Notifications are turned off for Mawaqit in System Settings.", systemImage: "bell.slash")
+                Label("Notifications are turned off for Kimono Prayer in System Settings.", systemImage: "bell.slash")
                     .font(.caption).foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
                 Button("Open Notification Settings") {
-                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=com.akramb.mawaqit")!)
+                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=app.kimono.prayer.menubar")!)
                 }
             } else {
                 Text("Alerts at each prayer and the last third of the night.")
@@ -311,13 +300,24 @@ struct SettingsPage: View {
         }
         if store.hasLocation {
             section("Prayer time source") {
-                Text(store.isCalculated ? "Calculated by AlAdhan" : "Mosque schedule from Mawaqit")
+                Text(store.isCalculated ? "Calculated by Kimono"
+                    : "Mosque schedule from \(store.state.place?.kind.label ?? "Mawaqit"), through Kimono")
+                if let detail = store.state.place?.detail {
+                    Text(detail).font(.caption).foregroundStyle(.secondary)
+                }
                 if store.isCalculated {
-                    Text(store.state.calculationMethod ?? "Automatic local method")
-                        .font(.caption).foregroundStyle(.secondary)
                     Text("Calculated times may differ from your local mosque or religious authority.")
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        if store.isConnected {
+            section("Kimono") {
+                HStack {
+                    Text("Connected")
+                    Spacer()
+                    Button("Disconnect") { store.disconnect() }.controlSize(.small)
                 }
             }
         }
