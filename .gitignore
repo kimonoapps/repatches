@@ -1,0 +1,4 @@
+.DS_Store
+*.shell-extension.zip
+swiftly.pkg
+.swift-version

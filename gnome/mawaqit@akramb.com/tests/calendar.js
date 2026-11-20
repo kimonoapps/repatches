@@ -1,0 +1,64 @@
+import GLib from 'gi://GLib';
+import Gio from 'gi://Gio';
+import {parseCalendar, schedule, mosqueSlug} from '../calendar.js';
+function assert(value, message) { if (!value) throw new Error(message); }
+function rejects(callback) { let failed = false; try { callback(); } catch (_) { failed = true; } assert(failed, 'Expected rejection'); }
+const calendar = Array.from({length: 12}, () => Object.fromEntries(Array.from({length: 31}, (_, i) => [String(i + 1), ['05:00', '06:30', '12:30', '15:30', '18:00', '20:00']])));
+const data = {timezone: 'America/Montreal', calendar, message: 'A }; and a "quoted" message'};
+assert(parseCalendar(`let confData =\n${JSON.stringify(data)};`).message === data.message, 'Parse multiline and quoted braces');
+rejects(() => parseCalendar('<html>blocked</html>'));
+assert(mosqueSlug('https://mawaqit.net/en/m/alsalam-mtl') === 'alsalam-mtl', 'URL selection');
+rejects(() => mosqueSlug('../invalid'));
+const before = schedule(data, GLib.DateTime.new_from_iso8601('2026-09-12T08:00:00Z', null));
+assert(before.next.name === 'Fajr', 'Timezone conversion');
+const sunrise = schedule(data, GLib.DateTime.new_from_iso8601('2026-09-12T09:30:00Z', null));
+assert(sunrise.next.name === 'Dhuhr', 'Sunrise is not a prayer');
+const night = schedule(data, GLib.DateTime.new_from_iso8601('2027-01-01T02:00:00Z', null));
+assert(night.next.name === 'Fajr', 'Tomorrow Fajr after Isha');
+assert(night.next.unix === GLib.DateTime.new_from_iso8601('2027-01-01T10:00:00Z', null).to_unix(), 'Year rollover');
+const dst = schedule(data, GLib.DateTime.new_from_iso8601('2026-03-08T08:00:00Z', null));
+assert(dst.next.unix === GLib.DateTime.new_from_iso8601('2026-03-08T09:00:00Z', null).to_unix(), 'Daylight saving time');
+// Prayer windows, Islamic midnight and last-third state use absolute instants.
+const viewAt = iso => schedule(data, GLib.DateTime.new_from_iso8601(iso, null));
+const fajr = viewAt('2026-09-12T09:15:00Z');
+assert(fajr.current.name === 'Fajr' && fajr.current.endTime === '06:30', 'Fajr ends at sunrise');
+assert(viewAt('2026-09-12T10:30:00Z').current === null, 'No active obligatory prayer after sunrise');
+const dhuhr = viewAt('2026-09-12T16:30:00Z');
+assert(dhuhr.current.name === 'Dhuhr' && dhuhr.current.endTime === '15:30', 'Dhuhr begins at exact start and ends at Asr');
+assert(viewAt('2026-09-12T19:30:00Z').current.name === 'Asr', 'At deadline, next prayer becomes active');
+const isha = viewAt('2026-09-13T02:00:00Z');
+assert(isha.current.name === 'Isha' && isha.current.endTime === '23:30', 'Isha ends at midpoint of sunset to Fajr');
+assert(isha.night.midnightTime === '23:30' && isha.night.lastThirdTime === '01:20', 'Night boundaries from 18:00 sunset to 05:00 Fajr');
+assert(viewAt('2026-09-13T03:30:00Z').current === null, 'Isha no longer active at Islamic midnight');
+const afterMidnight = viewAt('2026-09-13T04:30:00Z');
+assert(afterMidnight.night.active && afterMidnight.night.midnightTime === '23:30', 'Civil midnight retains previous sunset');
+assert(!afterMidnight.night.lastThirdActive, 'Last third is not active early');
+assert(viewAt('2026-09-13T05:20:00Z').night.lastThirdActive, 'Last third becomes active at exact boundary');
+assert(!viewAt('2026-09-13T09:00:00Z').night.lastThirdActive, 'Last third ends at Fajr');
+assert(viewAt('2026-09-13T09:00:00Z').current.name === 'Fajr', 'Fajr takes over after night');
+const yearNight = viewAt('2027-01-01T05:30:00Z');
+assert(yearNight.night.active && yearNight.night.midnightTime === '23:30', 'Previous-night state crosses year boundary');
+const dstNight = viewAt('2026-03-08T07:30:00Z');
+assert(dstNight.night.end - dstNight.night.start === 10 * 3600, 'DST night uses real elapsed duration');
+assert(dstNight.night.lastThirdActive, 'Last third remains correct through spring clock change');
+const fallNight = viewAt('2026-11-01T07:30:00Z');
+assert(fallNight.night.end - fallNight.night.start === 12 * 3600, 'Fall clock change extends elapsed night');
+assert(fallNight.night.lastThirdActive, 'Last third remains correct through fall clock change');
+assert(viewAt('2026-09-13T00:00:00Z').milestones.phase === 'midnight', 'Isha activates midnight milestone');
+assert(viewAt('2026-09-13T03:30:00Z').milestones.phase === 'lastThird', 'At midnight, advance to last third');
+assert(viewAt('2026-09-13T05:20:00Z').milestones.phase === 'sunrise', 'At last third, advance to sunrise');
+const dawnCycle = viewAt('2026-09-13T09:15:00Z').milestones;
+assert(dawnCycle.phase === 'sunrise' && dawnCycle.sunriseTime === '06:30', 'Fajr retains this morning sunrise');
+assert(dawnCycle.midnightTime === '23:30', 'Before sunrise keep preceding night milestones');
+assert(viewAt('2026-09-13T10:30:00Z').milestones.phase === null, 'Sunrise dims every night milestone');
+assert(viewAt('2026-09-13T22:30:00Z').milestones.phase === null, 'Milestones stay dim until Isha, including Maghrib');
+const eveningCycle = viewAt('2026-09-14T00:00:00Z').milestones;
+assert(eveningCycle.phase === 'midnight', 'Following Isha restarts cycle');
+assert(eveningCycle.sunrise === GLib.DateTime.new_from_iso8601('2026-09-14T10:30:00Z', null).to_unix(), 'Night uses upcoming sunrise');
+if (ARGV[0]) {
+    const [, bytes] = Gio.File.new_for_path(ARGV[0]).load_contents(null);
+    const live = parseCalendar(new TextDecoder().decode(bytes));
+    assert(schedule(live).today.length === 6, 'Live Mawaqit calendar');
+    print(`Live calendar OK: ${live.timezone}`);
+}
+print('Calendar tests passed');

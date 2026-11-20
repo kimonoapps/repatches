@@ -1,0 +1,16 @@
+{
+  "uuid": "mawaqit@akramb.com",
+  "name": "Mawaqit Prayer Times",
+  "description": "Mawaqit mosque schedules, calculated location fallback, prayer deadlines, night milestones and notifications in the GNOME top bar.",
+  "shell-version": [
+    "45",
+    "46",
+    "47",
+    "48",
+    "49",
+    "50"
+  ],
+  "version": 3,
+  "url": "https://github.com/akramboussanni/mawaqit-bar",
+  "author": "Akram Boussanni"
+}

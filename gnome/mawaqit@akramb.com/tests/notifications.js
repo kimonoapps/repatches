@@ -1,0 +1,27 @@
+import GLib from 'gi://GLib';
+import {schedule} from '../calendar.js';
+import {dueNotifications} from '../notifications.js';
+function assert(value, message) { if (!value) throw new Error(message); }
+const calendar = Array.from({length: 12}, () => Object.fromEntries(Array.from({length: 31}, (_, i) => [String(i + 1), ['05:00', '06:30', '12:30', '15:30', '18:00', '20:00']])));
+const data = {timezone: 'America/Montreal', calendar};
+const at = iso => schedule(data, GLib.DateTime.new_from_iso8601(iso, null));
+const start = at('2026-09-12T16:30:15Z');
+const events = dueNotifications(start, start.now - 30);
+assert(events.length === 1 && events[0].title === 'Dhuhr time', 'Announce prayer start on timer crossing');
+assert(events[0].body.includes('15:30'), 'Include deadline');
+assert(!dueNotifications(start, start.now).length, 'No startup or repeat alerts');
+assert(!dueNotifications(start, start.now - 30, new Set([events[0].id])).length, 'Suppress already delivered event');
+const sunrise = at('2026-09-12T10:30:15Z');
+assert(!dueNotifications(sunrise, sunrise.now - 30).length, 'No sunrise notification');
+const resumed = at('2026-09-12T17:30:00Z');
+assert(!dueNotifications(resumed, start.now - 30).length, 'No old alerts after resume');
+const isha = at('2026-09-13T00:00:15Z');
+assert(dueNotifications(isha, isha.now - 30)[0].body.includes('Islamic midnight'), 'Isha includes cutoff');
+const third = at('2026-09-13T05:20:15Z');
+assert(dueNotifications(third, third.now - 30)[0].title === 'Last third of the night', 'Night alert after civil midnight');
+const fajr = at('2026-09-13T09:00:15Z');
+assert(dueNotifications(fajr, fajr.now - 30)[0].title === 'Fajr time', 'Next day Fajr notification');
+const fractionalNight = {...third, night: {...third.night, lastThird: third.now + 0.5}, now: third.now};
+assert(!dueNotifications(fractionalNight, third.now - 30).length, 'Fractional boundary is not announced early');
+assert(dueNotifications({...fractionalNight, now: third.now + 30}, third.now)[0].title === 'Last third of the night', 'Fractional boundary is delivered on following tick');
+print('Notification tests passed');

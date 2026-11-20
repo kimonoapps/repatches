@@ -1,0 +1,44 @@
+.mawaqit-menu { width: 360px; }
+.mawaqit-entry { min-width: 230px; padding: 8px 10px; border-radius: 12px; }
+.mawaqit-icon { icon-size: 18px; }
+.mawaqit-status { font-size: 0.9em; }
+.mawaqit-status StLabel { max-width: 340px; }
+.mawaqit-calculated-menu { spacing: 10px; }
+.mawaqit-calculated-intro { font-size: 0.85em; opacity: 190; }
+.mawaqit-calculated-intro StLabel { max-width: 310px; }
+.mawaqit-source { font-size: 0.78em; opacity: 190; padding-top: 1px; padding-bottom: 4px; }
+.mawaqit-source StLabel { max-width: 340px; }
+.mawaqit-mosque { font-weight: bold; font-size: 1.1em; padding-bottom: 3px; spacing: 10px; }
+.mawaqit-mosque StLabel { max-width: 310px; }
+.mawaqit-subtitle { opacity: 180; font-size: 0.85em; padding-top: 0; padding-bottom: 6px; }
+.mawaqit-section-heading { font-size: 0.75em; font-weight: bold; padding-top: 4px; padding-bottom: 4px; }
+.mawaqit-prayer-row { margin: 0 14px; padding: 6px 8px; border-radius: 8px; spacing: 8px; }
+.mawaqit-prayer-time { font-weight: bold; min-width: 48px; text-align: right; }
+.mawaqit-next { font-weight: bold; }
+.mawaqit-past { opacity: 140; }
+.mawaqit-refresh { margin-top: 5px; font-size: 0.9em; spacing: 10px; }
+.mawaqit-result { spacing: 10px; padding-top: 10px; padding-bottom: 10px; }
+.mawaqit-result-name { font-weight: bold; max-width: 280px; }
+.mawaqit-result-location { font-size: 0.85em; max-width: 280px; margin-top: 3px; }
+
+.mawaqit-prayer-detail { font-size: 0.8em; opacity: 180; }
+.mawaqit-current { font-weight: bold; }
+.mawaqit-night-row { margin: 0 14px; padding: 5px 8px; spacing: 8px; }
+
+
+/* Only headings and active rows override GNOME's muted static-item text. */
+.mawaqit-menu .mawaqit-mosque:insensitive,
+.mawaqit-menu .mawaqit-section-heading:insensitive,
+.mawaqit-menu .mawaqit-current:insensitive,
+.mawaqit-menu .mawaqit-night-active:insensitive { color: #ffffff; opacity: 255; }
+.mawaqit-current-headline { font-size: 1.1em; spacing: 8px; }
+.mawaqit-current-detail { font-size: 0.8em; font-weight: normal; margin-top: 4px; max-width: 285px; }
+.mawaqit-current { padding-top: 10px; padding-bottom: 10px; }
+.mawaqit-upcoming-summary { font-size: 0.85em; padding-top: 3px; padding-bottom: 6px; }
+
+.mawaqit-night-active { font-weight: bold; }
+.mawaqit-night-active .mawaqit-prayer-detail { opacity: 255; }
+
+.mawaqit-location-button { padding: 8px; border-radius: 12px; }
+.mawaqit-location-button:hover, .mawaqit-location-button:focus { background-color: rgba(128, 128, 128, 0.25); }
+.mawaqit-location-button:insensitive { opacity: 100; }
