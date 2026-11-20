@@ -70,6 +70,9 @@ enum SettingSection {
   };
 
   const SettingSection(this.icon);
+
+  /// Networking edits and shows server addresses; Kimono sets the address.
+  static List<SettingSection> get shown => values.where((s) => s != SettingSection.networking).toList();
 }
 
 @RoutePage()
@@ -89,7 +92,7 @@ class _MobileLayout extends StatelessWidget {
   const _MobileLayout();
   @override
   Widget build(BuildContext context) {
-    final List<Widget> settings = SettingSection.values
+    final List<Widget> settings = SettingSection.shown
         .expand(
           (setting) => setting == SettingSection.beta
               ? [
@@ -126,7 +129,7 @@ class _TabletLayout extends HookWidget {
   const _TabletLayout();
   @override
   Widget build(BuildContext context) {
-    final selectedSection = useState<SettingSection>(SettingSection.values.first);
+    final selectedSection = useState<SettingSection>(SettingSection.shown.first);
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.start,
@@ -135,7 +138,7 @@ class _TabletLayout extends HookWidget {
           flex: 2,
           child: CustomScrollView(
             slivers: [
-              ...SettingSection.values.map(
+              ...SettingSection.shown.map(
                 (s) => SliverToBoxAdapter(
                   child: ListTile(
                     title: Text(s.title(context.t)),

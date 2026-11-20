@@ -27,7 +27,6 @@ import 'package:immich_mobile/theme/theme_data.dart';
 import 'package:immich_mobile/widgets/common/immich_logo.dart';
 import 'package:immich_mobile/widgets/common/immich_title_text.dart';
 import 'package:logging/logging.dart';
-import 'package:url_launcher/url_launcher.dart' show LaunchMode, launchUrl;
 
 class BootstrapErrorWidget extends StatelessWidget {
   final String error;
@@ -158,19 +157,6 @@ class _BottomPanelState extends State<_BottomPanel> {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            _ActionLink(
-              icon: Icons.chat_bubble_outline,
-              label: context.t.discord,
-              onTap: () => launchUrl(Uri.parse('https://discord.immich.app/'), mode: LaunchMode.externalApplication),
-            ),
-            _ActionLink(
-              icon: Icons.bug_report_outlined,
-              label: context.t.profile_drawer_github,
-              onTap: () => launchUrl(
-                Uri.parse('https://github.com/immich-app/immich/issues'),
-                mode: LaunchMode.externalApplication,
-              ),
-            ),
             if (!_cleared)
               _ActionLink(
                 icon: Icons.delete_outline,

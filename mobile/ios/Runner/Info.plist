@@ -13,8 +13,10 @@
     <true />
     <key>CFBundleDevelopmentRegion</key>
     <string>$(DEVELOPMENT_LANGUAGE)</string>
+    <key>KimonoKeychainGroup</key>
+    <string>$(AppIdentifierPrefix)app.kimono.shared</string>
     <key>CFBundleDisplayName</key>
-    <string>${PRODUCT_NAME}</string>
+    <string>Kimono Photos</string>
     <key>CFBundleDocumentTypes</key>
     <array>
       <dict>
@@ -74,11 +76,11 @@
       <string>zh</string>
     </array>
     <key>CFBundleName</key>
-    <string>immich_mobile</string>
+    <string>Kimono Photos</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>3.3.6</string>
+    <string>$(FLUTTER_BUILD_NAME)</string>
     <key>CFBundleSignature</key>
     <string>????</string>
     <key>CFBundleURLTypes</key>
@@ -100,12 +102,12 @@
         <string>Deep Link</string>
         <key>CFBundleURLSchemes</key>
         <array>
-          <string>immich</string>
+          <string>kimono-photos</string>
         </array>
       </dict>
     </array>
     <key>CFBundleVersion</key>
-    <string>4</string>
+    <string>$(FLUTTER_BUILD_NUMBER)</string>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false />
     <key>LSApplicationQueriesSchemes</key>
@@ -129,24 +131,23 @@
       <string>_CC1AD845._googlecast._tcp</string>
     </array>
     <key>NSCameraUsageDescription</key>
-    <string>We need to access the camera to let you take beautiful video using this app</string>
+    <string>Kimono Photos uses the camera when you take a photo or video in the app.</string>
     <key>NSFaceIDUsageDescription</key>
-    <string>We need to use FaceID to allow access to your locked folder</string>
+    <string>Kimono Photos uses Face ID to open your locked folder.</string>
     <key>NSLocalNetworkUsageDescription</key>
-    <string>We need local network permission to connect to the local server using IP address and
-      allow the casting feature to work</string>
+    <string>Kimono Photos uses your local network to cast photos to a TV.</string>
     <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-    <string>We require this permission to access the local WiFi name for background upload mechanism</string>
+    <string>Kimono Photos uses your Wi-Fi name to back up only on the networks you choose.</string>
     <key>NSLocationUsageDescription</key>
-    <string>We require this permission to access the local WiFi name</string>
+    <string>Kimono Photos uses your Wi-Fi name to back up only on the networks you choose.</string>
     <key>NSLocationWhenInUseUsageDescription</key>
-    <string>We require this permission to access the local WiFi name</string>
+    <string>Kimono Photos uses your Wi-Fi name to back up only on the networks you choose.</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>We need to access the microphone to let you take beautiful video using this app</string>
+    <string>Kimono Photos uses the microphone when you record a video in the app.</string>
     <key>NSPhotoLibraryAddUsageDescription</key>
-    <string>We need to manage backup your photos album</string>
+    <string>Kimono Photos saves the photos and videos you download.</string>
     <key>NSPhotoLibraryUsageDescription</key>
-    <string>We need to manage backup your photos album</string>
+    <string>Kimono Photos backs up the photos and videos you choose.</string>
     <key>NSUserActivityTypes</key>
     <array>
       <string>INSendMessageIntent</string>

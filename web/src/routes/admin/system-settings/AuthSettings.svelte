@@ -10,7 +10,7 @@
   import AuthDisableLoginConfirmModal from '$lib/modals/AuthDisableLoginConfirmModal.svelte';
   import { handleError } from '$lib/utils/handle-error';
   import { OAuthTokenEndpointAuthMethod, unlinkAllOAuthAccountsAdmin } from '@immich/sdk';
-  import { Button, Link, modalManager, Text, toastManager } from '@immich/ui';
+  import { Button, modalManager, Text, toastManager } from '@immich/ui';
   import { mdiRestart } from '@mdi/js';
   import { t } from 'svelte-i18n';
   import { fade } from 'svelte/transition';
@@ -75,7 +75,7 @@
             <Text size="small">
               <FormatMessage key="admin.oauth_settings_more_details">
                 {#snippet children({ message })}
-                  <Link href="https://docs.immich.app/administration/oauth">{message}</Link>
+                  {message}
                 {/snippet}
               </FormatMessage>
             </Text>

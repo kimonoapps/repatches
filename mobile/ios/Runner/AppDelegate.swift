@@ -1,3 +1,4 @@
+import Security
 import native_video_player
 
 @main
@@ -14,6 +15,20 @@ import native_video_player
     SwiftNativeVideoPlayerPlugin.cookieStorage = URLSessionManager.cookieStorage
     URLSessionManager.patchBackgroundDownloader()
     BackgroundWorkerApiImpl.registerBackgroundWorkers()
+
+    // Kimono reads this build's version from the keychain group it shares, to offer TestFlight's newer one.
+    if let group = Bundle.main.object(forInfoDictionaryKey: "KimonoKeychainGroup") as? String, !group.hasPrefix("$("),
+       let id = Bundle.main.bundleIdentifier {
+      let info = Bundle.main.infoDictionary
+      let value = Data("\(info?["CFBundleShortVersionString"] as? String ?? "")\n\(info?["CFBundleVersion"] as? String ?? "")".utf8)
+      let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "app.kimono.installed", kSecAttrAccount as String: id, kSecAttrAccessGroup as String: group]
+      if SecItemUpdate(query as CFDictionary, [kSecValueData as String: value] as CFDictionary) == errSecItemNotFound {
+        var add = query
+        add[kSecValueData as String] = value
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        SecItemAdd(add as CFDictionary, nil)
+      }
+    }
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }

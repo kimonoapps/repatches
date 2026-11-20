@@ -20,12 +20,14 @@ import 'package:immich_mobile/extensions/build_context_extensions.dart';
 import 'package:immich_mobile/generated/codegen_loader.g.dart';
 import 'package:immich_mobile/generated/translations.g.dart';
 import 'package:immich_mobile/infrastructure/repositories/network.repository.dart';
+import 'package:immich_mobile/kimono/kimono_connect.dart';
 import 'package:immich_mobile/pages/common/splash_screen.page.dart';
 import 'package:immich_mobile/platform/background_worker_lock_api.g.dart';
 import 'package:immich_mobile/platform/native_sync_api.g.dart';
 import 'package:immich_mobile/platform/permission_api.g.dart';
 import 'package:immich_mobile/providers/app_life_cycle.provider.dart';
 import 'package:immich_mobile/providers/asset_viewer/share_intent_upload.provider.dart';
+import 'package:immich_mobile/providers/auth.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/platform.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/settings.provider.dart';
 import 'package:immich_mobile/providers/locale_provider.dart';
@@ -194,11 +196,16 @@ class ImmichAppState extends ConsumerState<ImmichApp> with WidgetsBindingObserve
 
     final isColdStart = currentRouteName == null || currentRouteName == SplashScreenRoute.name;
 
+    if (KimonoConnect.isConnectLink(deepLink.uri)) {
+      if (!ref.read(authProvider).isAuthenticated) {
+        await KimonoConnect.accept(deepLink.uri);
+      }
+      return isColdStart ? DeepLink.defaultPath : DeepLink.none;
+    }
+
     PageRouteInfo? route;
-    if (deepLink.uri.scheme == "immich") {
+    if (deepLink.uri.scheme == "kimono-photos") {
       route = await deepLinkHandler.handleScheme(deepLink, ref);
-    } else if (deepLink.uri.host == "my.immich.app") {
-      route = await deepLinkHandler.handleMyImmichApp(deepLink, ref);
     } else {
       return DeepLink.path(deepLink.path);
     }
