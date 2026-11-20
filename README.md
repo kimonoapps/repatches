@@ -7,7 +7,6 @@ behave like part of Kimono. Nothing upstream is forked or vendored.
 | App | Upstream | Becomes | Outputs |
 | --- | --- | --- | --- |
 | `immich` | [immich-app/immich](https://github.com/immich-app/immich) `v3.3.6` | Kimono Photos | server image (web included), Android APK, iPhone (TestFlight) |
-| `mawaqit-bar` | [akramboussanni/mawaqit-bar](https://github.com/akramboussanni/mawaqit-bar) `v1.2.2` | Kimono Prayer (menu bar / top bar) | Mac app (DMG, zip), GNOME extension zip |
 
 ## Layout
 
@@ -15,11 +14,11 @@ behave like part of Kimono. Nothing upstream is forked or vendored.
 upstream/<app>/                 submodule, exactly the pinned release (never edited)
 apps/<app>/
   upstream.env                  UPSTREAM_TAG — CI checks the submodule is that tag
-  patches/<part>/NNNN-*.patch   the changes, one concern per patch (immich: mobile, web; mawaqit-bar: macos, gnome)
+  patches/<part>/NNNN-*.patch   the changes, one concern per patch (parts: mobile, web)
   branding/<part>/              artwork copied over upstream's (binary, so not patches)
   intent/<part>.md              what each patch must achieve: the spec repairs work from
   checks/<part>.sh              the gate: identity, behaviour, builds
-  build/                        build scripts (images, apps, zips)
+  build/                        image build scripts
 scripts/                        apply / export / check, shared by every app
 work/                           patched checkouts (git-ignored)
 ```
@@ -33,7 +32,6 @@ scripts/apply.sh immich             # work/immich: pin + patches as commits + br
 scripts/export.sh immich mobile     # commits → apps/immich/patches/mobile/
 scripts/check.sh immich             # reapply from scratch and run the quick checks
 scripts/check.sh immich --full      # also build the APK and server image
-scripts/check.sh mawaqit-bar --full # the Mac app (needs a Mac) and the GNOME zip
 ```
 
 The commit body is part of the patch. It says why the change exists and what
@@ -52,13 +50,6 @@ publishes three things:
 
 Phones get build number `<upstream build> × 100 + n`, so every release
 outranks the last one.
-
-Kimono Prayer's tag is `mawaqit-bar/v<upstream>-kimono.<n>`, e.g.
-`mawaqit-bar/v1.2.2-kimono.1`. It puts `kimono-prayer-<version>.dmg`, its
-`-macos.zip` and `prayer@kimono.app.shell-extension.zip` on the GitHub release.
-The Mac build number is `<major·minor·patch as 10203> × 100 + n`. The Mac app is
-signed and notarized only if the optional Developer ID secrets below are set;
-otherwise it's ad-hoc signed and Gatekeeper asks on first open.
 
 ## Following upstream
 
@@ -91,7 +82,6 @@ GitHub, but never edit it.
 | `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY`, `APPLE_TEAM_ID` | in `mobile-release`: App Store Connect API key for TestFlight |
 | `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` | the repair job (`claude setup-token` makes the latter) |
 | `REPATCHES_BOT_TOKEN` | pushes and PRs from the daily job, so their CI runs (contents + pull-requests write) |
-| `MACOS_CERTIFICATE_P12`, `MACOS_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_PASSWORD`, optional | Kimono Prayer's Mac app: Developer ID signing and notarization (the same secrets mawaqit-bar's own release uses) |
 
 The `mobile-release` environment should allow only `immich/v*` tags.
 
@@ -99,8 +89,3 @@ Kimono's side of Kimono Photos lives in the kimono repo
 (`apps/portal/app-definitions/immich/app.json`): the image, the
 `app.kimono.photos:///oauth-callback` redirect URI, and the phone setup step
 that opens `kimono-photos://connect?server=…`.
-
-Kimono's side of Kimono Prayer is Prayer in the kimono repo
-(`apps/portal/src/lib/prayer`, `apps/portal/src/app/api/v1/prayer`): the
-personal link `…/api/v1/prayer/feed/<token>` the apps read through, and the
-`mawaqit-kimono://connect?link=…` address its Connect button opens.
